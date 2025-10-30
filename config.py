@@ -7,7 +7,6 @@ from pathlib import Path
 class Settings(BaseSettings):
     # Queue & concurrency
     max_concurrent_synthetic_jobs: int = 2  # Max concurrent SDV jobs
-    synthetic_output_size_multiplier: float = 1.0  # e.g., 1.0 = same size as input
 
     # SDV
     sdv_model_type: str = "GaussianCopulaSynthesizer"  # or "CTGANSynthesizer", etc.
@@ -23,9 +22,9 @@ class Settings(BaseSettings):
 
     log_level: str = Field("INFO")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # class Config:
+    #     env_file = ".env"
+    #     env_file_encoding = "utf-8"
 
 
 settings = Settings()
