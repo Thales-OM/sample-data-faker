@@ -75,7 +75,7 @@ class SyntheticDataWorker:
     def _load_from_s3(s3_path: str) -> pd.DataFrame:
         ################################# Test #############################
         
-        parquet_filename = "complex_dataframe.parquet"
+        parquet_filename = "complex_input.parquet"
         df_loaded_parquet = pd.read_parquet(parquet_filename)
         return df_loaded_parquet
 
