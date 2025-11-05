@@ -3,6 +3,7 @@ import numpy as np
 from typing import Any, Dict, List, Tuple, Union
 
 
+# FIXME: currently produces null values inside varied length arrays
 class DataFrameFlattener:
     def __init__(self):
         self._schema = None
