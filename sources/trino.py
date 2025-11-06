@@ -4,7 +4,7 @@ from . import register_source
 import pandas as pd
 from sqlalchemy import create_engine
 from urllib.parse import quote_plus
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 
 
 class TrinoSourceConfig(DataSourceConfig):
@@ -22,7 +22,9 @@ class TrinoSourceConfig(DataSourceConfig):
 
     # Catalog & schema (required for URL)
     catalog: str = Field(..., description="Trino catalog (e.g., hive, postgresql)")
-    schema: str = Field(..., description="Schema within the catalog")
+    schema_name: str = Field(
+        ..., description="Schema within the catalog", alias="schema"
+    )
 
     # Optional: HTTP headers, session properties, etc.
     http_headers: Optional[Dict[str, str]] = Field(
@@ -38,62 +40,49 @@ class TrinoSourceConfig(DataSourceConfig):
     def host_not_empty(cls, v):
         if not v.strip():
             raise ValueError("Host cannot be empty")
-        return v
+        return v.strip()
 
-    @field_validator("catalog", "schema", "user", mode="after")
+    @field_validator("catalog", "schema_name", "user", mode="after")
     def non_empty_strings(cls, v):
         if not v or not v.strip():
             raise ValueError("Field cannot be empty")
         return v.strip()
 
 
-@register_source("trino", TrinoSourceConfig)
+@register_source
 class TrinoSource(DataSource):
-    def __init__(
-        self,
-        host: str,
-        port: int,
-        user: str,
-        catalog: str,
-        schema: str,
-        table: str,
-        password: Optional[SecretStr] = None,
-        http_headers: Optional[Dict[str, str]] = None,
-        session_properties: Optional[Dict[str, Any]] = None,
-    ):
-        self.host = host
-        self.port = port
-        self.user = user
-        self.catalog = catalog
-        self.schema = schema
-        self.table = table
-        self.password = password.get_secret_value() if password else None
-        self.http_headers = http_headers or {}
-        self.session_properties = session_properties or {}
+    type: Literal["trino"] = "trino"
+    config: TrinoSourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
         # Build password part
-        password_part = f":{quote_plus(self.password)}" if self.password else ""
+        password_part = (
+            f":{quote_plus(self.config.password.get_secret_value())}"
+            if self.config.password
+            else ""
+        )
         # Build URL
-        url = f"trino://{self.user}{password_part}@{self.host}:{self.port}/{self.catalog}/{self.schema}"
+        url = f"trino://{self.config.user}{password_part}@{self.config.host}:{self.config.port}/{self.config.catalog}/{self.config.schema_name}"
 
         # Add session properties as query args (e.g., ?session_properties=query_priority%3Dhigh)
-        if self.session_properties:
+        if self.config.session_properties:
             from urllib.parse import urlencode
 
             engine = create_engine(
                 url,
-                connect_args={"http_headers": self.http_headers},
+                connect_args={"http_headers": self.config.http_headers or {}},
             )
         else:
             engine = create_engine(
                 url,
                 connect_args=(
-                    {"http_headers": self.http_headers} if self.http_headers else {}
+                    {"http_headers": self.config.http_headers}
+                    if self.config.http_headers
+                    else {}
                 ),
             )
 
-        query = f"SELECT * FROM {self.table}"
+        query = f"SELECT * FROM {self.config.table}"
         if limit is not None:
             query += f" LIMIT {limit}"
 

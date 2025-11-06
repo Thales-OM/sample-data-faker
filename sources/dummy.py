@@ -1,6 +1,7 @@
 from .base import DataSource, DataSourceConfig
 from . import register_source
 import pandas as pd
+from typing import Literal
 import os
 
 
@@ -8,10 +9,10 @@ class DummySourceConfig(DataSourceConfig):
     pass
 
 
-@register_source("dummy", DummySourceConfig)
+@register_source
 class DummySource(DataSource):
-    def __init__(self):
-        pass
+    type: Literal["dummy"] = "dummy"
+    config: DummySourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
         # TODO: add to settings

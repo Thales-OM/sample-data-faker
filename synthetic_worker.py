@@ -9,7 +9,7 @@ from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer
 from sdv.metadata import SingleTableMetadata
 from flatten import DataFrameFlattener
 from config import settings
-from sources import get_source_loader
+from sources import DataSource
 
 logger = LoggerFactory.getLogger(__name__)
 
@@ -42,14 +42,14 @@ class SyntheticDataWorker:
 
     async def enqueue_request(
         self,
-        source_config: Dict[str, Any],
+        source: DataSource,
         output_size: int,
         load_limit: Optional[int] = None,
     ) -> asyncio.Future:
         future = self._loop.create_future()
         self.queue.put(
             {
-                "source_config": source_config,
+                "source": source,
                 "output_size": output_size,
                 "load_limit": load_limit,
                 "future": future,
@@ -73,7 +73,7 @@ class SyntheticDataWorker:
     def _process_item(self, item: Dict[str, Any], loop: asyncio.AbstractEventLoop):
         try:
             result = self._generate_synthetic_data(
-                source_config=item["source_config"],
+                source=item["source"],
                 output_size=item["output_size"],
                 load_limit=item["load_limit"],
             )
@@ -83,15 +83,13 @@ class SyntheticDataWorker:
 
     def _generate_synthetic_data(
         self,
-        source_config: Dict[str, Any],
+        source: DataSource,
         output_size: int,
         load_limit: Optional[int] = None,
     ) -> pd.DataFrame:
-        source_type = source_config.pop("type")
-        loader = get_source_loader(source_type, **source_config)
-        df = loader.load_dataframe(limit=load_limit)
+        df = source.load_dataframe(limit=load_limit)
 
-        logger.info("Loaded %d rows from %s source", len(df), source_type)
+        logger.info("Loaded %d rows from %s source", len(df), source.type)
 
         flattener = DataFrameFlattener()
         df = flattener.flatten(df=df)
