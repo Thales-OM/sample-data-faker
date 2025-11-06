@@ -1,55 +1,72 @@
-from .base import DataSource, DataSourceConfig
-from typing import Dict, Type, List
+from .base import DataSource
+from typing import Dict, Type, Union
 import importlib
 import pkgutil
 import pathlib
+from typing import Literal, get_type_hints, get_origin, get_args, Annotated
 import sys
-from pydantic import BaseModel, create_model
-from typing import Union
+from pydantic import BaseModel, create_model, Field
 
 
 SOURCE_REGISTRY: Dict[str, Type[DataSource]] = {}
 
 
-def register_source(name: str, config_model: Type[DataSourceConfig]):
+def register_source(cls: Type[DataSource]):
     """Decorator to register a data source with its config schema."""
 
-    def decorator(cls: Type[DataSource]):
-        if name in SOURCE_REGISTRY:
-            raise ValueError(f"Source type '{name}' already registered")
-        cls.config_model = config_model
-        cls._source_name = name  # store name on class
-        SOURCE_REGISTRY[name] = cls
-        return cls
+    TYPE_FIELD = "type"
 
-    return decorator
+    if not issubclass(cls, DataSource):
+        raise TypeError(
+            f"@check_type_literal can only be applied to DataSource subclasses, got {cls.__name__}"
+        )
 
+    # Get type annotations for the class
+    annotations = get_type_hints(cls)
 
-def get_source_loader(source_type: str, **config) -> DataSource:
-    if source_type not in SOURCE_REGISTRY:
-        available = list(SOURCE_REGISTRY.keys())
-        raise ValueError(f"Unknown source type: {source_type}. Available: {available}")
-    cls = SOURCE_REGISTRY[source_type]
-    config_obj = cls.config_model(**config)  # validate early
-    return cls(**config_obj.model_dump(mode="python"))
+    if TYPE_FIELD not in annotations:
+        raise TypeError(f"Class {cls.__name__} must have a '{TYPE_FIELD}' field")
+
+    type_annotation = annotations[TYPE_FIELD]
+
+    # Check if it's a Literal type
+    origin = get_origin(type_annotation)
+    if origin is not Literal:
+        raise TypeError(
+            f"Field '{TYPE_FIELD}' in {cls.__name__} must be of type Literal, got {type_annotation}"
+        )
+
+    # Get the literal arguments
+    args = get_args(type_annotation)
+
+    # Check if there's exactly one argument and it's a string
+    if len(args) != 1:
+        raise TypeError(
+            f"Field '{TYPE_FIELD}' in {cls.__name__} must be Literal with exactly one value, got {len(args)} values: {args}"
+        )
+
+    literal_value = args[0]
+    if not isinstance(literal_value, str):
+        raise TypeError(
+            f"Field '{TYPE_FIELD}' in {cls.__name__} must be Literal[str], got Literal[{type(literal_value).__name__}]: {literal_value}"
+        )
+
+    if literal_value in SOURCE_REGISTRY:
+        raise KeyError(
+            f"Duplicate DataSource type discovered ({TYPE_FIELD}: {literal_value}, class: {cls.__name__})"
+        )
+
+    SOURCE_REGISTRY[literal_value] = cls
+    return cls
 
 
 def build_source_union_type() -> Type[BaseModel]:
     """Build a discriminated union of all source config models."""
     if not SOURCE_REGISTRY:
         raise RuntimeError("No sources registered. Did you import plugins?")
-
-    # Collect all (name, config_model) pairs
-    choices = {}
-    for name, cls in SOURCE_REGISTRY.items():
-        model_with_type = create_model(
-            f"{name.capitalize()}Source",
-            type=(str, name),  # required for discrimination
-            __base__=cls.config_model,
-        )
-        choices[name] = model_with_type
-
-    return Union[tuple(choices.values())]
+    return Annotated[
+        Union[tuple(SOURCE_REGISTRY.values())], Field(discriminator="type")
+    ]
 
 
 def _discover_plugins():

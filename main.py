@@ -3,7 +3,6 @@ import pandas as pd
 from synthetic_worker import SyntheticDataWorker
 from models import SyntheticRequest, SyntheticResponse
 from lifespan import lifespan
-from utils import get_s3_iceberg_path
 from deps import get_worker_queue
 import json
 
@@ -18,16 +17,9 @@ root_router = APIRouter(prefix="/api/v1")
 async def generate_synthetic(
     request: SyntheticRequest, worker: SyntheticDataWorker = Depends(get_worker_queue)
 ):
-    # Extract source type and config
-    source_obj = request.source
-    source_type = source_obj.type
-    source_config = source_obj.model_dump(mode="python")
-    # Remove the injected 'type' field before passing to worker
-    source_config.pop("type")
-
     try:
         future = await worker.enqueue_request(
-            source_config={"type": source_type, **source_config},
+            source=request.source,
             output_size=request.output_size,
             load_limit=request.load_limit,
         )
