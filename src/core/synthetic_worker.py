@@ -4,12 +4,12 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
 import torch
 import pandas as pd
-from logger import LoggerFactory
+from src.logger import LoggerFactory
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer
 from sdv.metadata import SingleTableMetadata
-from flatten import DataFrameFlattener
-from config import settings
-from sources import DataSource
+from src.core.flatten import DataFrameFlattener
+from src.config import settings
+from src.sources import DataSource
 
 logger = LoggerFactory.getLogger(__name__)
 

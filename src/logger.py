@@ -1,7 +1,7 @@
 import logging
 import sys
 from typing import Optional
-from config import settings
+from src.config import settings
 
 
 class LoggerFactory:

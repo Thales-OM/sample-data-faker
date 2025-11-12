@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "Preset Dashboards"
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 5
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true # Optional: use folder structure from filesystem

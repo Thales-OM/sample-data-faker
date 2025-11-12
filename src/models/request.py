@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from sources import SourceConfig
+from src.sources import SourceConfig
 from typing import Optional
 
 

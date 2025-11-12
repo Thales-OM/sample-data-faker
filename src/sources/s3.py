@@ -3,8 +3,8 @@ from .base import DataSource, DataSourceConfig
 from . import register_source
 import pandas as pd
 import s3fs
-from config import settings
-from logger import LoggerFactory
+from src.config import settings
+from src.logger import LoggerFactory
 from typing import Optional, Literal
 
 logger = LoggerFactory.getLogger(__name__)
