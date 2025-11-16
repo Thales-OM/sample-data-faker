@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     if settings.openmetadata:
         app.state.omd_async_client = AsyncOMDClient(config=settings.openmetadata, logger=LoggerFactory.getLogger("root_omd_client"))
         logger.info("Root Async OpenMetadata client created")
-        client_healthy, ex = app.state.omd_async_client.is_healthy()
+        client_healthy, ex = await app.state.omd_async_client.is_healthy()
         if not client_healthy:
             top_ex = RuntimeError("OpenMetadata connection not healthy")
             if isinstance(ex, BaseException):

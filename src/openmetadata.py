@@ -165,14 +165,14 @@ class AsyncOMDClient:
             self.logger.error("DELETE %s failed: %s", url, e)
             raise
 
-    def is_healthy(self) -> Tuple[bool, Optional[Exception]]:
+    async def is_healthy(self) -> Tuple[bool, Optional[Exception]]:
         """A check whether an OpenMetadata client connection is working
         Returns:
             Tuple[bool, Optional[Exception]]: Client is successfully \
                 making requests, returns Exception object if an error has occured
         """
         try:
-            self.get(endpoint="/tables", params={"limit": 0}, nullable=False)
+            await self.get(endpoint="/tables", params={"limit": 0}, nullable=False)
         except Exception as ex:
             return False, ex
         return True, None
