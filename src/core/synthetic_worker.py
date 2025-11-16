@@ -5,18 +5,13 @@ from queue import Queue, Empty
 import torch
 import pandas as pd
 from src.logger import LoggerFactory
-from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer
+from sdv.single_table import CTGANSynthesizer
 from sdv.metadata import SingleTableMetadata
 from src.core.flatten import DataFrameFlattener
 from src.config import settings
 from src.sources import DataSource
 
 logger = LoggerFactory.getLogger(__name__)
-
-SYNTHESIZER_MAP = {
-    "GaussianCopulaSynthesizer": GaussianCopulaSynthesizer,
-    "CTGANSynthesizer": CTGANSynthesizer,
-}
 
 
 class SyntheticDataWorker:
@@ -94,7 +89,7 @@ class SyntheticDataWorker:
         flattener = DataFrameFlattener()
         df = flattener.flatten(df=df)
 
-        synth_cls = SYNTHESIZER_MAP.get(settings.sdv_model_type)
+        synth_cls = settings.sdv_model_class
         if not synth_cls:
             raise ValueError(f"Unsupported synthesizer: {settings.sdv_model_type}")
 
@@ -102,7 +97,7 @@ class SyntheticDataWorker:
         metadata.detect_from_dataframe(df)
 
         model_params = settings.sdv_model_params.copy()
-        if settings.sdv_model_type == "CTGANSynthesizer":
+        if settings.sdv_model_class == CTGANSynthesizer:
             model_params["cuda"] = torch.cuda.is_available()
 
         synthesizer = synth_cls(metadata=metadata, **model_params)

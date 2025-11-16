@@ -24,4 +24,4 @@ COPY . .
 
 EXPOSE 8080
 
-ENTRYPOINT ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
+ENTRYPOINT ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]

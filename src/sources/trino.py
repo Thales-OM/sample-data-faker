@@ -55,6 +55,7 @@ class TrinoSource(DataSource):
     config: TrinoSourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
+        IGNORE_COLUMNS = ["_dq", "_dq_failed_checks", "_stage_dt", "_cleansed_dt"]
         # Build password part
         password_part = (
             f":{quote_plus(self.config.password.get_secret_value())}"
@@ -62,7 +63,7 @@ class TrinoSource(DataSource):
             else ""
         )
         # Build URL
-        url = f"trino://{self.config.user}{password_part}@{self.config.host}:{self.config.port}/{self.config.catalog}/{self.config.schema_name}"
+        url = f"trino://{self.config.user}{password_part}@{self.config.host}:{self.config.port}/{self.config.catalog}/{self.config.schema_name}?externalAuthentication=true"
 
         # Add session properties as query args (e.g., ?session_properties=query_priority%3Dhigh)
         if self.config.session_properties:
@@ -87,4 +88,5 @@ class TrinoSource(DataSource):
             query += f" LIMIT {limit}"
 
         df = pd.read_sql(query, engine)
+        df.drop(columns=IGNORE_COLUMNS, axis=1, inplace=True, errors="ignore")
         return df

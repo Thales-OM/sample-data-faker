@@ -1,15 +1,36 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, HttpUrl, field_validator
 from typing import Optional, Dict
+from src.constants import *
 
 
 class TrinoConnectionConfig(BaseSettings):
     host: str
-    port: int = 8080
-    catalog: str
-    schema_name: str = Field(..., alias="schema")
+    port: int = 443
     user: str
     password: Optional[SecretStr] = None
+    catalog: str = "dto_iceberg"
+
+
+class OMDConfig(BaseSettings):
+    api_url: HttpUrl = Field(
+        ..., description="Base URL of OpenMetadata server, e.g. https://om.example.com"
+    )
+    token: SecretStr = Field(
+        ..., min_length=10, description="Bearer token for authentication"
+    )
+    api_version: str = Field(
+        "v1", pattern=r"^v\d+$", description="API version (e.g., 'v1')"
+    )
+    timeout: float = Field(30.0, ge=1, le=300, description="HTTP timeout in seconds")
+    retries: int = Field(
+        3, ge=0, le=5, description="Number of retries on transient errors"
+    )
+
+    @field_validator("api_url", mode="after")
+    @classmethod
+    def ensure_no_trailing_slash(cls, v):
+        return HttpUrl(str(v).rstrip("/"))
 
 
 class Settings(BaseSettings):
@@ -18,17 +39,20 @@ class Settings(BaseSettings):
     aws_secret_access_key: Optional[SecretStr] = None
     aws_region: Optional[str] = None
 
-    # Named secure connections
-    trino_connections: Dict[str, TrinoConnectionConfig] = {}
+    # Trino
+    trino: Optional[TrinoConnectionConfig] = None
 
     # SDV & queue
     max_concurrent_synthetic_jobs: int = 2
-    sdv_model_type: str = "GaussianCopulaSynthesizer"
+    sdv_model_type: SDVSynthesizer = SDVSynthesizer.GAUSSIAN_COPULA
     sdv_model_params: dict = {}
     cleanup_on_complete: bool = True
 
     # Logging
-    log_level: str = Field("INFO")
+    log_level: str = DEFAULT_LOG_LEVEL
+
+    # OpenMetadata
+    openmetadata: Optional[OMDConfig] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -36,6 +60,19 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
         extra="ignore",
     )
+
+    @field_validator("sdv_model_type", mode="after")
+    @classmethod
+    def check_class_mapping(cls, v):
+        if not (synthesizer_class := SYNTHESIZER_MAP.get(v, None)):
+            raise KeyError("Synthesizer is declared but is missing a class mapping")
+        if not issubclass(synthesizer_class, BaseSynthesizer):
+            raise ValueError("Synthesizer is misdeclared, not an subclass from BaseSynthesizer")
+        return v
+    
+    @property
+    def sdv_model_class(self) -> BaseSynthesizer:
+        return SYNTHESIZER_MAP[self.sdv_model_type]
 
 
 settings = Settings()

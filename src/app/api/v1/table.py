@@ -1,17 +1,16 @@
-from fastapi import FastAPI, Depends, APIRouter, status, HTTPException
+from fastapi import Depends, APIRouter, status, HTTPException
 import pandas as pd
 from src.core.synthetic_worker import SyntheticDataWorker
 from src.models import SyntheticRequest, SyntheticResponse
-from src.metrics.middleware import MetricsMiddleware
-from src.api.lifespan import lifespan
-from src.api.deps import get_worker_queue
+from src.app.deps import get_worker_queue
 import json
 
-root_router = APIRouter(prefix="/api/v1")
+
+router = APIRouter(prefix="/table")
 
 
-@root_router.post(
-    "/table/generate",
+@router.post(
+    "/generate",
     response_model=SyntheticResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -35,13 +34,3 @@ async def generate_synthetic(
             ),
             detail=str(e),
         )
-
-
-@root_router.get("/health", status_code=status.HTTP_200_OK)
-async def health_check():
-    return {"status": "healthy"}
-
-
-app = FastAPI(title="Synthetic Data Generator", lifespan=lifespan)
-app.include_router(router=root_router)
-app.add_middleware(MetricsMiddleware)
