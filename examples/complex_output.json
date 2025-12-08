@@ -1,0 +1,632 @@
+[
+  {
+    "user_id": 6138286,
+    "full_name": "Tammy Martin",
+    "email": "xhicks@example.org",
+    "tags": [
+      "mean",
+      "fast",
+      "city",
+      null,
+      null
+    ],
+    "addresses": [
+      {
+        "city": "Bowmanport",
+        "country": "Cuba",
+        "is_primary": false,
+        "street": "251 Brian Passage"
+      },
+      {
+        "city": "Morrisonfurt",
+        "country": "American Samoa",
+        "is_primary": false,
+        "street": "44278 Jeremiah Circle Suite 813"
+      },
+      {
+        "city": "Brianaberg",
+        "country": "Cook Islands",
+        "is_primary": null,
+        "street": "7740 Riley Squares Apt. 938"
+      }
+    ],
+    "profile": {
+      "age": 66,
+      "department": "Finance",
+      "salary": 123567.5,
+      "skills": [
+        "Insurance claims handler",
+        "Optometrist",
+        "Accountant, chartered certified",
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": 383.95,
+        "currency": null,
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": "GBP",
+        "timestamp": "2025-04-20T19:08:12",
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      }
+    ]
+  },
+  {
+    "user_id": 9216891,
+    "full_name": "Lauren Palmer",
+    "email": "jasonburke@example.org",
+    "tags": [
+      "officer",
+      "test",
+      "stage",
+      null,
+      null
+    ],
+    "addresses": [
+      {
+        "city": "Staceychester",
+        "country": "Suriname",
+        "is_primary": false,
+        "street": "0725 Herman Unions Suite 164"
+      },
+      {
+        "city": "West Blake",
+        "country": "Guinea-Bissau",
+        "is_primary": false,
+        "street": "28000 Trevor Vista Apt. 714"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 59,
+      "department": "Marketing",
+      "salary": 71180.03,
+      "skills": [
+        "Solicitor",
+        "Production engineer",
+        "Occupational psychologist",
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "login"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      }
+    ]
+  },
+  {
+    "user_id": 15482477,
+    "full_name": "Michelle Smith",
+    "email": "icrosby@example.net",
+    "tags": [
+      "travel",
+      "your",
+      null,
+      null,
+      null
+    ],
+    "addresses": [
+      {
+        "city": "Coreymouth",
+        "country": "Vanuatu",
+        "is_primary": true,
+        "street": "51028 Shelton Ferry"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 31,
+      "department": "Marketing",
+      "salary": 101356.49,
+      "skills": [
+        "Diagnostic radiographer",
+        "Engineer, materials",
+        "Teacher, early years/pre",
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": "USD",
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      }
+    ]
+  },
+  {
+    "user_id": 6685114,
+    "full_name": "Trevor Everett",
+    "email": "michellehubbard@example.net",
+    "tags": [
+      "interview",
+      "nice",
+      "I",
+      "section",
+      "television"
+    ],
+    "addresses": [
+      {
+        "city": "Collinsstad",
+        "country": "Korea",
+        "is_primary": true,
+        "street": "63818 Adam Flats"
+      },
+      {
+        "city": null,
+        "country": "Svalbard & Jan Mayen Islands",
+        "is_primary": null,
+        "street": null
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 78,
+      "department": "HR",
+      "salary": 146814.55,
+      "skills": [
+        "Water engineer",
+        "Historic buildings inspector/conservation officer",
+        null,
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-08-03T13:30:59",
+        "type": "login"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": "USD",
+        "timestamp": null,
+        "type": null
+      }
+    ]
+  },
+  {
+    "user_id": 6689746,
+    "full_name": "Amber Mason",
+    "email": "stevenmiller@example.com",
+    "tags": [
+      "newspaper",
+      "left",
+      null,
+      null,
+      null
+    ],
+    "addresses": [
+      {
+        "city": "New Ryanborough",
+        "country": "Guam",
+        "is_primary": false,
+        "street": "438 Gates Turnpike Apt. 101"
+      },
+      {
+        "city": "East Emily",
+        "country": "Micronesia",
+        "is_primary": false,
+        "street": "1495 Russell Dam"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 62,
+      "department": "Finance",
+      "salary": 40562.3,
+      "skills": [
+        "Futures trader",
+        "Speech and language therapist",
+        "Museum/gallery curator",
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-07-16T03:39:08",
+        "type": "view"
+      },
+      {
+        "amount": null,
+        "currency": "USD",
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "view"
+      }
+    ]
+  },
+  {
+    "user_id": 11818073,
+    "full_name": "Ralph Parrish",
+    "email": "dawsonkristopher@example.net",
+    "tags": [
+      "to",
+      "summer",
+      null,
+      "natural",
+      "near"
+    ],
+    "addresses": [
+      {
+        "city": "Williamsside",
+        "country": "India",
+        "is_primary": true,
+        "street": "786 Walter Throughway Suite 350"
+      },
+      {
+        "city": "Vaughnberg",
+        "country": null,
+        "is_primary": false,
+        "street": "30098 Frederick Trafficway Apt. 876"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 20,
+      "department": "Finance",
+      "salary": 140493.47,
+      "skills": [
+        "Scientist, water quality",
+        "Fashion designer",
+        "Leisure centre manager",
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-07-06T13:05:56",
+        "type": "view"
+      },
+      {
+        "amount": 645.77,
+        "currency": null,
+        "timestamp": null,
+        "type": "edit"
+      }
+    ]
+  },
+  {
+    "user_id": 4498502,
+    "full_name": "Nicole Gonzalez",
+    "email": "lisakhan@example.com",
+    "tags": [
+      "physical",
+      "set",
+      "hold",
+      "receive",
+      "member"
+    ],
+    "addresses": [
+      {
+        "city": "Josephland",
+        "country": "Israel",
+        "is_primary": false,
+        "street": "454 Simmons Mall Suite 982"
+      },
+      {
+        "city": "New Ronaldmouth",
+        "country": "Dominica",
+        "is_primary": null,
+        "street": "14325 Matthew Station"
+      },
+      {
+        "city": "West Lauren",
+        "country": "Greece",
+        "is_primary": true,
+        "street": "37040 Emily Springs Suite 168"
+      }
+    ],
+    "profile": {
+      "age": 62,
+      "department": "Engineering",
+      "salary": 75814.67,
+      "skills": [
+        "Metallurgist",
+        "Geologist, engineering",
+        "Financial risk analyst",
+        "IT sales professional"
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "login"
+      }
+    ]
+  },
+  {
+    "user_id": 153594,
+    "full_name": "Brett Gonzalez",
+    "email": "robinsilva@example.org",
+    "tags": [
+      "staff",
+      "produce",
+      null,
+      "building",
+      null
+    ],
+    "addresses": [
+      {
+        "city": "Nicholsside",
+        "country": "Djibouti",
+        "is_primary": false,
+        "street": "574 Christopher Pines Suite 751"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": true,
+        "street": null
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 33,
+      "department": "Sales",
+      "salary": 128884.62,
+      "skills": [
+        "Special educational needs teacher",
+        "Chartered public finance accountant",
+        "Investment banker, corporate",
+        "Designer, television/film set"
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": 559.92,
+        "currency": null,
+        "timestamp": "2025-03-18T23:55:35",
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-06-08T00:50:43",
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": "edit"
+      }
+    ]
+  },
+  {
+    "user_id": 4933337,
+    "full_name": "Anna Taylor",
+    "email": "bentleyshane@example.net",
+    "tags": [
+      "there",
+      "seat",
+      "speak",
+      null,
+      null
+    ],
+    "addresses": [
+      {
+        "city": "Jameschester",
+        "country": "Algeria",
+        "is_primary": true,
+        "street": "72430 Steven Green Apt. 661"
+      },
+      {
+        "city": "Michaelstad",
+        "country": "Northern Mariana Islands",
+        "is_primary": null,
+        "street": "78543 Rebecca Forks"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 46,
+      "department": "Finance",
+      "salary": 81840.77,
+      "skills": [
+        "Geologist, engineering",
+        "Geologist, engineering",
+        null,
+        null
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": 409.43,
+        "currency": null,
+        "timestamp": null,
+        "type": "purchase"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-07-06T13:34:05",
+        "type": "login"
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": "2025-05-21T08:40:56",
+        "type": null
+      }
+    ]
+  },
+  {
+    "user_id": 11440469,
+    "full_name": "Ashley Thomas",
+    "email": "brendamartin@example.net",
+    "tags": [
+      "law",
+      "society",
+      null,
+      null,
+      "why"
+    ],
+    "addresses": [
+      {
+        "city": "Sarahfurt",
+        "country": "Netherlands",
+        "is_primary": true,
+        "street": "0993 Marc Springs"
+      },
+      {
+        "city": null,
+        "country": null,
+        "is_primary": null,
+        "street": null
+      },
+      {
+        "city": null,
+        "country": "Yemen",
+        "is_primary": false,
+        "street": null
+      }
+    ],
+    "profile": {
+      "age": 77,
+      "department": "Finance",
+      "salary": 33879.39,
+      "skills": [
+        "Systems developer",
+        "Gaffer",
+        "Furniture conservator/restorer",
+        "IT consultant"
+      ]
+    },
+    "recent_activities": [
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      },
+      {
+        "amount": null,
+        "currency": null,
+        "timestamp": null,
+        "type": null
+      }
+    ]
+  }
+]

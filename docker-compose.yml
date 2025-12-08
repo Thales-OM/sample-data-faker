@@ -1,0 +1,96 @@
+services:
+  openmetadata-sample-faker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Trino connection
+      TRINO_CONNECTIONS__LOCAL__HOST: trino
+      TRINO_CONNECTIONS__LOCAL__PORT: 8080
+      TRINO_CONNECTIONS__LOCAL__CATALOG: iceberg
+      TRINO_CONNECTIONS__LOCAL__SCHEMA: default
+      TRINO_CONNECTIONS__LOCAL__USER: admin
+      # AWS for MinIO
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    depends_on:
+      - trino
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  trino:
+    image: trinodb/trino:445
+    ports:
+      - "8081:8080"
+    environment:
+      - TRINO_LOG_LEVEL=INFO
+    volumes:
+      - ./trino/etc/catalog:/etc/trino/catalog
+    depends_on:
+      - minio
+      - hive-metastore
+
+  hive-metastore:
+    image: apache/hive:4.0.0
+    environment:
+      - HIVE_METASTORE_URI=thrift://hive-metastore:9083
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+      - AWS_S3_ENDPOINT=minio:9000
+      - AWS_S3_PATH_STYLE_ACCESS=true
+      - SERVICE_NAME=metastore
+    ports:
+      - "9083:9083"
+    # command: ["/opt/hive/bin/start-metastore", "-p", "9083"]
+    depends_on:
+      - minio
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console UI
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./provisioning/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./provisioning/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+volumes:
+  minio_data:
+  prometheus_data:
+  grafana_data:
