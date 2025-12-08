@@ -68,7 +68,7 @@ WebhookTableUnionType = Annotated[
 ]
 
 
-@router.post("/webhook", status_code=status.HTTP_201_CREATED)
+@router.post("/webhook", response_model=WebhookResponse, status_code=status.HTTP_201_CREATED)
 async def webhook(
     body: WebhookTableUnionType,
     omd_async_client: AsyncOMDClient = Depends(get_omd_async_client),
