@@ -2,8 +2,7 @@ from typing import Union, Annotated
 from fastapi import Depends, APIRouter, status, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import Field
-import pandas as pd
-from src.core.synthetic_worker import SyntheticDataWorker
+from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.models import (
     SyntheticRequest,
     OpenMetadataPopulateResponse,
@@ -12,7 +11,7 @@ from src.models import (
     WebhookTableUpdated,
     WebhookResponse,
 )
-from src.openmetadata import AsyncOMDClient
+from src.destinations.openmetadata import AsyncOMDClient
 from src.app.deps import get_worker_queue, get_omd_async_client
 from src.sources.trino import TrinoSource, TrinoSourceConfig
 from src.utils import openmetadata_to_dto_table
@@ -48,17 +47,17 @@ async def generate_synthetic(
             output_size=request.output_size,
             load_limit=request.load_limit,
         )
-        synthetic_df: pd.DataFrame = await future
+        synthetic_df_wrap: DataFrameWrapper = await future
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
 
-    sample_data = SampleData.from_dataframe(df=synthetic_df)
+    sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
     await omd_async_client.add_sample_data(id=table_id, body=sample_data)
     return OpenMetadataPopulateResponse(
-        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_df)
+        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_df_wrap)
     )
 
 
@@ -126,13 +125,13 @@ async def webhook(
             output_size=DEFAULT_OUTPUT_SIZE,
             load_limit=DEFAULT_SAMPLE_SIZE,
         )
-        synthetic_df: pd.DataFrame = await future
+        synthetic_df_wrap: DataFrameWrapper = await future
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
 
-    sample_data = SampleData.from_dataframe(df=synthetic_df)
+    sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
     await omd_async_client.add_sample_data(id=table_id, body=sample_data)
     return WebhookResponse(message="ok")

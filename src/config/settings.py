@@ -46,6 +46,12 @@ class S3DestinationConfig(BaseSettings):
     S3_BUCKET: str
     S3_USE_SSL: bool
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
 
 class Settings(BaseSettings):
     # Global AWS (fallback)

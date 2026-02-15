@@ -1,5 +1,4 @@
-from enum import StrEnum
-from typing import List, Dict, Any, Literal
+from typing import List, Dict, Any
 from pydantic import RootModel, BaseModel
 
 
@@ -18,9 +17,14 @@ class WebhookResponse(BaseModel):
     message: str = "ok"
 
 
-class HealthStatus(StrEnum):
-    OK = "ok"
+class ReadinessResponse(RootModel[str]):
+    root: str = "OK!"
 
 
-class HealthResponse(BaseModel):
-    status: HealthStatus = HealthStatus.OK
+class LivenessResponse(RootModel[str]):
+    root: str = "OK!"
+
+
+class AvroOCFResponse(BaseModel):
+    message: str = "ok"
+    s3_path: str

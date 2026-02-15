@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from prometheus_client import make_asgi_app, REGISTRY
 from src.core.synthetic_worker import SyntheticDataWorker
 from src.metrics.collector import SystemMetricsCollector
-from src.openmetadata import AsyncOMDClient
+from src.destinations.openmetadata import AsyncOMDClient
 import asyncio
 from src.logger import LoggerFactory
 from src.config import settings

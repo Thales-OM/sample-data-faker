@@ -19,6 +19,7 @@ class SampleData(BaseModel):
                 )
         return self
     
+    # FIXME: heavy dataframe to json conversion
     def from_dataframe(df: pd.DataFrame) -> "SampleData":
         df_json = df.to_json(orient="split", date_format="iso", index=False)
         df_dict: Dict[str, Any] = json.loads(df_json)

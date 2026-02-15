@@ -5,7 +5,7 @@ import pkgutil
 import pathlib
 from typing import Literal, get_type_hints, get_origin, get_args, Annotated
 import sys
-from pydantic import BaseModel, create_model, Field
+from pydantic import BaseModel, Field
 
 
 SOURCE_REGISTRY: Dict[str, Type[DataSource]] = {}
