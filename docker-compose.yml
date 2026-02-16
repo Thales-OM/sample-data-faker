@@ -2,9 +2,9 @@ services:
   sample-data-faker:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: deploy/services/sample-data-faker/Dockerfile
     ports:
-      - "8080:8080"
+      - "8000:8000"
     environment:
       # Trino connection
       TRINO_CONNECTIONS__LOCAL__HOST: trino
@@ -19,11 +19,6 @@ services:
     depends_on:
       - trino
       - minio
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   trino:
     image: trinodb/trino:445
