@@ -2,8 +2,8 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'openmetadata-sample-faker'
+  - job_name: 'sample-data-faker'
     static_configs:
-      - targets: ['openmetadata-sample-faker:8080']
+      - targets: ['sample-data-faker:8080']
     metrics_path: /metrics
   

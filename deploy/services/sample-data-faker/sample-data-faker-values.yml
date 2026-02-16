@@ -1,0 +1,64 @@
+# This config applies to py-app service when it's deployed to any env and cluster
+# If you need to specify settings:
+# for a particular env: use deploy/services/py-app/<env>/*values.yml
+# for a particular cluster in env: use deploy/services/py-app/<env>/<cluster>/*values.yml
+# Will be merged with deploy/all/base-values.yml
+
+# config:
+#   path: /config
+#   files:
+#     config_file.yml:
+#       data: |
+#         some_config: value
+#     other_file.json:
+#       data: |
+#         {
+#           "key1": "value1"
+#         }
+
+# initContainers:
+#   my-init: # will be used as container name
+#     command:
+#       - "/bin/sh"
+#       - "-c"
+#       - "echo 'I am busy... I am initializing' && sleep 10"
+#     env:
+#       - name: EXAMPLE_VAR
+#         value: "yoooo"
+#     image: "harbor.wildberries.ru/docker-hub-proxy/library/alpine:3.17"
+#     imagePullPolicy: "IfNotPresent"
+#     resources:
+#       requests:
+#         cpu: "0.1"
+#         memory: "100M"
+#       limits:
+#         cpu: "0.2"
+#         memory: "100M"
+
+# sidecarContainers:
+#   my-sidecar: # will be used as container name
+#     command:
+#       - "/bin/sh"
+#       - "-c"
+#       - "sleep 13131313"
+#     env:
+#       - name: EXAMPLE_VAR
+#         value: "yoooo"
+#     image: "harbor.wildberries.ru/docker-hub-proxy/library/alpine:3.17"
+#     imagePullPolicy: "IfNotPresent"
+#     resources:
+#       requests:
+#         cpu: "0.1"
+#         memory: "100M"
+#       limits:
+#         cpu: "0.2"
+#         memory: "100M"
+
+vault:
+  entrypoint: "python3 /app/main.py"
+  enabled: true
+  files:
+    - vault_secret_path: services/dg-tools/prd/sample-data-faker
+      vault_secret_key: dotenv
+      mount_dir: /etc/env
+      mount_file: .env

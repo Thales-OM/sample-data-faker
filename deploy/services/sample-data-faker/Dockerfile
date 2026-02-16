@@ -22,6 +22,14 @@ RUN pip3 install -r requirements.txt
 WORKDIR /app
 COPY . .
 
-EXPOSE 8080
+# update PATH environment variable
+ENV PATH=/home/appuser/.local/bin:$PATH
 
-ENTRYPOINT ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
+RUN ln -s /etc/env/.env /app/.env
+
+# run container as non-root user
+USER appuser
+
+EXPOSE 8000
+
+CMD [ "python3", "/app/main.py" ]

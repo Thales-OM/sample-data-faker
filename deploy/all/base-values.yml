@@ -1,0 +1,53 @@
+# Values for deploy of any service in the repo despite of chart, env and cluster
+
+replicaCount: 1
+
+image:
+  repository: {{ .Helm.Release.Image }}
+  tag: {{ .Helm.Release.Tag }}
+  pullPolicy: IfNotPresent
+
+ports:
+  - name: http
+    containerPort: 8000
+    protocol: TCP
+
+readinessProbe:
+  httpGet:
+    path: "/readiness"
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: "/liveness"
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Secret for pulling images from your Harbor project, don't change or delete
+imagePullSecrets:
+  - name: harbor-registry-secret
+
+# For services without own resources settings in deploy/service_name/*values.yml
+resources:
+  requests:
+    memory: "1024Mi"
+    cpu: "1"
+  limits:
+    memory: "4096Mi"
+    cpu: "4"
+
+strategy:
+  type: Recreate
+
+service:
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+
+chartMeta:
+  owner: pugin.ilya
