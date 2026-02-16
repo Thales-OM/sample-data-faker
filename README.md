@@ -1,1 +1,1 @@
-# openmetadata-sample-faker
+# sample-data-faker
