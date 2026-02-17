@@ -1,6 +1,14 @@
 # This config applies to service when it's deployed to any cluster in STAGE env
 # Will be merged with deploy/services/py-app/py-app-values.yml and then with deploy/all/base-values.yml
 
+resources:
+  requests:
+    memory: "1024Mi"
+    cpu: "1"
+  limits:
+    memory: "1024Mi"
+    cpu: "1"
+
 ingress:
   enabled: true
   ingressClassName: dg-tools
