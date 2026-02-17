@@ -1,0 +1,74 @@
+# https://gitlab.wildberries.ru/devops/ci/templates/-/blob/master/README.md
+.template_repo: &repo
+  project: &ci_tmpl 'devops/ci/templates'
+  # Pipeline version, keep it up to date: https://gitlab.wildberries.ru/devops/ci/templates/-/releases
+  ref: &ci_tmpl_vers 'v3.28.1'
+
+variables:
+  # Mandatory vars. Don't change or delete
+  CI_TMPL_PROJECT: *ci_tmpl
+  CI_TMPL_PROJECT_VERSION: *ci_tmpl_vers
+
+  # Lang specific vars. Specify if needed
+  PY_IMAGE_VERSION: "3.11-slim"
+  PY_LINT_PATHS: ./src ./main.py
+
+  # Not mandatory vars. For short use in CI_TMPL_HELM_CHARTS and CI_TMPL_HELM_RELEASE_NAMES
+  # You can add other vars for helm charts if needed. Don't forget that charts are OCI-based
+  # List of available helm charts: https://gitlab.wildberries.ru/devops/helm/charts 
+  COMMON_DEPLOY_CHART: "oci://harbor.wildberries.ru/devops/helm/charts/common-deploy"
+  COMMON_JOB_CHART: "oci://harbor.wildberries.ru/devops/helm/charts/common-job"
+  
+  # Helm charts for deploy and their versions
+  # COMMON_DEPLOY_CHART is placed the 1st, so this is the default chart
+  # COMMON_JOB_CHART is an additional chart
+  # Keep versions up to date. Versions are in chart repo>Releases
+  # List of repos: https://gitlab.wildberries.ru/devops/helm/charts
+  CI_TMPL_HELM_CHART_COMMON_JOB_VERSION: 2.2.0
+  CI_TMPL_HELM_CHART_COMMON_DEPLOY_VERSION: 8.3.2
+  CI_TMPL_HELM_CHARTS: "$COMMON_DEPLOY_CHART@v$CI_TMPL_HELM_CHART_COMMON_DEPLOY_VERSION,$COMMON_JOB_CHART@v$CI_TMPL_HELM_CHART_COMMON_JOB_VERSION"
+
+  # List of services for build & deploy. Your service name is used for helm release name
+  # py-app, py-app-2, py-app-common use COMMON_DEPLOY_CHART because this is the default chart
+  # py-app-job use COMMON_JOB_CHART because this is defined via @
+  CI_TMPL_HELM_RELEASE_NAMES: "sample-data-faker"
+
+  # Namespace matches your project's GitLab subgroup (2nd level of nesting)
+  # <gitlab_instance>/root_group/namespace_subgroup/*/your_project
+  # If you don't know which namespace_subgroup your project should be under, ask your team for more info
+  # Check this template's URL to understand why the template value is `ci`
+  # https://gitlab.wildberries.ru/devops/ci/projects/python-tmpl
+  CI_TMPL_HELM_RELEASE_NAMESPACE: "dg-tools"
+  
+  # List of clusters for deploy
+  # If you don't know your clusters ask your team for more info
+  # CI_TMPL_KUBE_CLUSTERS_DEV: "k8s.dev-el"
+  CI_TMPL_KUBE_CLUSTERS_STAGE: "k8s.dataoffice-stage-dl"
+  CI_TMPL_KUBE_CLUSTERS_PROD: "k8s.dataoffice-el"
+  CI_TMPL_HELM_ROLLBACK: "Manual"
+  NEED_VOTES: 1
+  
+
+
+  # # Harbor project name
+  # # By default matches your project's GitLab root group (1st level of nesting)
+  # # This default value is set in charts so you don't need to define Harbor project name in your repo
+  # # Uncomment for custom settings and ask your team if you should specify a
+  # # custom name for Harbor project which doesn't match your root group
+  REGISTRY_PROJECT: "data-platform"
+
+  #
+  # # Optional example vars
+  #
+
+  # # HHX custom var example
+  # # Check line 4 in deploy/py-app/py-app-values.yml
+  # CI_TMPL_HELM_CUSTOM_MY_VAR1: "myvalue"
+  
+  # # Change deploy jobs appearance in pipeline
+  CI_TMPL_DEPLOY_GROUPING: per-cluster
+  CI_TMPL_ALLOW_SINGLE_CLUSTER_DEPLOY: "true"
+
+# Pipeline template for CI/CD
+include:
+  - {<<: *repo, file: /pipelines/python.yml}

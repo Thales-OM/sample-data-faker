@@ -1,12 +1,14 @@
+from pathlib import Path
+import pandas as pd
+from pydantic import PrivateAttr
+from typing import Literal, Union
+from src.config import DUMMY_DATASET_FILEPATH
 from .base import DataSource, DataSourceConfig
 from . import register_source
-import pandas as pd
-from typing import Literal
-import os
 
 
 class DummySourceConfig(DataSourceConfig):
-    pass
+    _input_filepath: Union[Path, str] = PrivateAttr(DUMMY_DATASET_FILEPATH)
 
 
 @register_source
@@ -15,9 +17,7 @@ class DummySource(DataSource):
     config: DummySourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
-        # TODO: add to settings
-        INPUT_FILEPATH = os.path.join(os.getcwd(), "examples/complex_input.parquet")
-        df = pd.read_parquet(INPUT_FILEPATH)
+        df = pd.read_parquet(self.config._input_filepath)
         if limit is not None and len(df) > limit:
             df = df.head(limit)
         return df

@@ -1,0 +1,13 @@
+# This config applies to service when it's deployed to any cluster in PROD env
+# Will be merged with deploy/services/py-app/py-app-values.yml and then with deploy/all/base-values.yml
+
+ingress:
+  enabled: true
+  ingressClassName: dg-tools
+  objects:
+    - servicePort: 80
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /$2
+      hosts:
+        - name: {{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}
+          path: /{{ .Helm.Release.Name }}(/|$)(.*)

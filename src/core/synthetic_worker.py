@@ -3,13 +3,14 @@ from typing import Any, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
 import torch
-import pandas as pd
-from src.logger import LoggerFactory
 from sdv.single_table import CTGANSynthesizer
 from sdv.metadata import SingleTableMetadata
-from src.core.flatten import DataFrameFlattener
+from src.logger import LoggerFactory
 from src.config import settings
 from src.sources import DataSource
+from .flatten import DataFrameFlattener
+from .dataframe_wrapper import DataFrameWrapper
+
 
 logger = LoggerFactory.getLogger(__name__)
 
@@ -81,7 +82,7 @@ class SyntheticDataWorker:
         source: DataSource,
         output_size: int,
         load_limit: Optional[int] = None,
-    ) -> pd.DataFrame:
+    ) -> DataFrameWrapper:
         df = source.load_dataframe(limit=load_limit)
 
         logger.info("Loaded %d rows from %s source", len(df), source.type)
@@ -112,4 +113,4 @@ class SyntheticDataWorker:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        return flattener.unflatten(flat_df=synthetic_df)
+        return DataFrameWrapper(df=flattener.unflatten(flat_df=synthetic_df))

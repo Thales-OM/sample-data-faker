@@ -1,7 +1,12 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, HttpUrl, field_validator
-from typing import Optional, Dict
-from src.constants import *
+from typing import Optional
+from .constants import (
+    SDVSynthesizer,
+    DEFAULT_LOG_LEVEL,
+    BaseSynthesizer,
+    SYNTHESIZER_MAP,
+)
 
 
 class TrinoConnectionConfig(BaseSettings):
@@ -33,6 +38,21 @@ class OMDConfig(BaseSettings):
         return HttpUrl(str(v).rstrip("/"))
 
 
+class S3DestinationConfig(BaseSettings):
+    S3_ENDPOINT: HttpUrl = HttpUrl("http://localhost:9000")
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: SecretStr = Field(exclude=True)
+    S3_REGION: str
+    S3_BUCKET: str
+    S3_USE_SSL: bool
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class Settings(BaseSettings):
     # Global AWS (fallback)
     aws_access_key_id: Optional[str] = None
@@ -54,6 +74,9 @@ class Settings(BaseSettings):
     # OpenMetadata
     openmetadata: Optional[OMDConfig] = None
 
+    # Sample data S3 destination
+    s3_destination: S3DestinationConfig = S3DestinationConfig()
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -67,9 +90,11 @@ class Settings(BaseSettings):
         if not (synthesizer_class := SYNTHESIZER_MAP.get(v, None)):
             raise KeyError("Synthesizer is declared but is missing a class mapping")
         if not issubclass(synthesizer_class, BaseSynthesizer):
-            raise ValueError("Synthesizer is misdeclared, not an subclass from BaseSynthesizer")
+            raise ValueError(
+                "Synthesizer is misdeclared, not an subclass from BaseSynthesizer"
+            )
         return v
-    
+
     @property
     def sdv_model_class(self) -> BaseSynthesizer:
         return SYNTHESIZER_MAP[self.sdv_model_type]

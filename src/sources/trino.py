@@ -63,12 +63,11 @@ class TrinoSource(DataSource):
             else ""
         )
         # Build URL
-        url = f"trino://{self.config.user}{password_part}@{self.config.host}:{self.config.port}/{self.config.catalog}/{self.config.schema_name}?externalAuthentication=true"
+        url = f"trino://{self.config.user}{password_part}@{self.config.host}:{self.config.port}"
+        f"/{self.config.catalog}/{self.config.schema_name}?externalAuthentication=true"
 
         # Add session properties as query args (e.g., ?session_properties=query_priority%3Dhigh)
         if self.config.session_properties:
-            from urllib.parse import urlencode
-
             engine = create_engine(
                 url,
                 connect_args={"http_headers": self.config.http_headers or {}},

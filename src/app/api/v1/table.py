@@ -1,6 +1,5 @@
 from fastapi import Depends, APIRouter, status, HTTPException
-import pandas as pd
-from src.core.synthetic_worker import SyntheticDataWorker
+from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.models import SyntheticRequest, SyntheticResponse
 from src.app.deps import get_worker_queue
 import json
@@ -23,8 +22,9 @@ async def generate_synthetic(
             output_size=request.output_size,
             load_limit=request.load_limit,
         )
-        synthetic_df: pd.DataFrame = await future
-        return json.loads(synthetic_df.to_json(orient="records"))
+        synthetic_df_wrap: DataFrameWrapper = await future
+        # FIXME: heavy dataframe to json conversion
+        return json.loads(synthetic_df_wrap.df.to_json(orient="records", date_format="iso", index=False))
     except Exception as e:
         raise HTTPException(
             status_code=(
