@@ -3,7 +3,7 @@
 
 resources:
   requests:
-    memory: "4096Mi"
+    memory: "4096 Mi"
     cpu: "2"
   limits:
     memory: "4096Mi"
@@ -19,3 +19,12 @@ ingress:
       hosts:
         - name: {{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}
           path: /{{ .Helm.Release.Name }}(/|$)(.*)
+
+vault:
+  entrypoint: "python3 /app/main.py"
+  enabled: true
+  files:
+    - vault_secret_path: services/dg-tools/prd/sample-data-faker
+      vault_secret_key: dotenv
+      mount_dir: /etc/env
+      mount_file: .env

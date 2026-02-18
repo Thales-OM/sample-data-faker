@@ -53,12 +53,3 @@
 #       limits:
 #         cpu: "0.2"
 #         memory: "100M"
-
-vault:
-  entrypoint: "python3 /app/main.py"
-  enabled: true
-  files:
-    - vault_secret_path: services/dg-tools/prd/sample-data-faker
-      vault_secret_key: dotenv
-      mount_dir: /etc/env
-      mount_file: .env
