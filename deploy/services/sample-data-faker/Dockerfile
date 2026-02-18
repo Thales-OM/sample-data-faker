@@ -22,7 +22,11 @@ RUN pip3 install -r requirements.txt
 WORKDIR /app
 COPY . .
 
-# update PATH environment variable
+# Create non-root user and set proper permissions
+RUN useradd -m -s /bin/bash appuser && \
+    chown -R appuser:appuser /app
+
+# update PATH environment variable (for the new user)
 ENV PATH=/home/appuser/.local/bin:$PATH
 
 RUN ln -s /etc/env/.env /app/.env
