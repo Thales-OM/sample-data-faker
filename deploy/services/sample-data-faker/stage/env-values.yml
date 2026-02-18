@@ -3,10 +3,10 @@
 
 resources:
   requests:
-    memory: "1024Mi"
+    memory: "1536Mi"
     cpu: "1"
   limits:
-    memory: "1024Mi"
+    memory: "1536Mi"
     cpu: "1"
 
 ingress:
