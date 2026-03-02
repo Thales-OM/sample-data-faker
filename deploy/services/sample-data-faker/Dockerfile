@@ -14,8 +14,7 @@ ENV PIP_INDEX_URL="${NEXUS_PROXY}/repository/pypi-group/simple" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN pip3 install --upgrade pip
-
+WORKDIR /requirements
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt
 
