@@ -22,7 +22,9 @@ WORKDIR /app
 COPY . .
 
 # Create non-root user and set proper permissions
-RUN useradd -m -s /bin/bash appuser && \
+RUN if ! id -u appuser >/dev/null 2>&1; then \
+        useradd -m -s /bin/bash appuser; \
+    fi && \
     chown -R appuser:appuser /app
 
 # update PATH environment variable (for the new user)
