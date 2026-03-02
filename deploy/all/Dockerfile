@@ -28,7 +28,8 @@ COPY --from=requirements-cache --chown=appuser:appgroup /root/.local /home/appus
 
 # upgrade packages for runtime
 RUN apt-get update --no-cache && \
-    apt-get upgrade --no-cache
+    apt-get upgrade --no-cache && \
+    rm -rf /var/lib/apt/lists/*
 
 # update PATH environment variable
 ENV PATH=/home/appuser/.local/bin:$PATH
