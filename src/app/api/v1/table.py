@@ -20,7 +20,7 @@ async def generate_synthetic(
     settings: Settings = Depends(get_app_settings),
 ):
     try:
-        future = await worker.submit(
+        future = worker.submit(
             source=request.source,
             output_size=request.output_size,
             synthesizer_cls=settings.sdv_model_class,
