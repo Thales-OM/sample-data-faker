@@ -1,7 +1,8 @@
-from fastapi import FastAPI, status, APIRouter, Depends, HTTPException
+from fastapi import FastAPI, status, APIRouter, Depends, HTTPException, Request
 from src.metrics.middleware import MetricsMiddleware
 from src.core import SyntheticDataWorker
-from src.models import ReadinessResponse, LivenessResponse
+from src.models import ReadinessResponse, LivenessResponse, VersionResponse
+from src.config import APP_VERSION
 from .lifespan import lifespan
 from .api import router as api_router
 from .deps import get_worker_queue
@@ -33,6 +34,13 @@ async def liveness():
     return LivenessResponse("OK!")
 
 
+@root_router.get(
+    "/version", response_model=VersionResponse, status_code=status.HTTP_200_OK
+)
+async def version(request: Request):
+    return VersionResponse(version=request.app.version)
+
+
 def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
@@ -43,7 +51,9 @@ def create_app() -> FastAPI:
     - Routers
     - Dependencies
     """
-    app = FastAPI(title="Synthetic Data Generator", lifespan=lifespan)
+    app = FastAPI(
+        title="Synthetic Data Generator", lifespan=lifespan, version=APP_VERSION
+    )
 
     app.add_middleware(MetricsMiddleware)
 

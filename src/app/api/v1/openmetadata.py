@@ -44,7 +44,7 @@ async def generate_synthetic(
         )
     table_id = table["id"]
     try:
-        future = await worker.submit(
+        future = worker.submit(
             source=body.source,
             output_size=body.output_size,
             synthesizer_cls=settings.sdv_model_class,

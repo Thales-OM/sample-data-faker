@@ -25,6 +25,10 @@ class LivenessResponse(RootModel[str]):
     root: str = "OK!"
 
 
+class VersionResponse(BaseModel):
+    version: str = "unknown"
+
+
 class AvroOCFResponse(BaseModel):
     message: str = "ok"
     s3_path: str
