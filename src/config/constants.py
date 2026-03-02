@@ -31,7 +31,7 @@ SYNTHESIZER_MAP: frozendict[SDVSynthesizer, Type[BaseSynthesizer]] = frozendict(
 
 # Assets
 DUMMY_DATASET_FILEPATH = (
-    Path(__file__).parent.parent / "examples" / "complex_input.parquet"
+    Path(__file__).parent.parent.parent / "examples" / "complex_input.parquet"
 )
 
 # Avro parsing

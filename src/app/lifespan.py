@@ -55,4 +55,4 @@ async def lifespan(app: FastAPI):
     yield
 
     app.state.worker.shutdown(wait=True, timeout=60.0)
-    logger.info("Async worker queue stopped")
+    logger.info("Worker queue stopped")
