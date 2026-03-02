@@ -1,3 +1,4 @@
+from typing import Type
 from pathlib import Path
 from frozendict import frozendict
 from enum import StrEnum
@@ -18,7 +19,7 @@ class SDVSynthesizer(StrEnum):
     CTGAN = "CTGANSynthesizer"
 
 
-SYNTHESIZER_MAP: frozendict[SDVSynthesizer, BaseSynthesizer] = frozendict(
+SYNTHESIZER_MAP: frozendict[SDVSynthesizer, Type[BaseSynthesizer]] = frozendict(
     {
         SDVSynthesizer.GAUSSIAN_COPULA: GaussianCopulaSynthesizer,
         SDVSynthesizer.CTGAN: CTGANSynthesizer,
@@ -30,3 +31,6 @@ SYNTHESIZER_MAP: frozendict[SDVSynthesizer, BaseSynthesizer] = frozendict(
 DUMMY_DATASET_FILEPATH = (
     Path(__file__).parent.parent / "examples" / "complex_input.parquet"
 )
+
+# Avro parsing
+DEFAULT_AVRO_NAMESPACE = "wb"

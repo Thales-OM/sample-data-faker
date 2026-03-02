@@ -27,14 +27,10 @@ class S3Writer:
             df (pd.DataFrame): tabular data to upload
             filename (str): file name (without extension)
             prefix (Optional[str], optional): S3 path prefix. Defaults to None.
-            format (Literal[&quot;csv&quot;], optional): file format to save in. Defaults to "csv".
-
-        Raises:
-            ValueError: _description_
-            FileNotFoundError: _description_
+            format (Literal["csv"], optional): file format to save in. Defaults to "csv".
 
         Returns:
-            str: _description_
+            str: Path to the saved file in the given bucket
         """
 
         filename_with_ext = None
@@ -48,15 +44,17 @@ class S3Writer:
         s3_key = filename_with_ext
         if prefix:
             s3_key = f"{prefix}/{s3_key}"
+        if self._config.key:
+            s3_key = self._config.key
 
         # Configure client
         session = get_session()
-        bucket_name = self._config.S3_BUCKET
+        bucket_name = self._config.bucket
         client_kwargs = {
-            "endpoint_url": str(self._config.S3_ENDPOINT),
-            "aws_access_key_id": self._config.S3_ACCESS_KEY,
-            "aws_secret_access_key": self._config.S3_SECRET_KEY.get_secret_value(),
-            "region_name": self._config.S3_REGION,
+            "endpoint_url": str(self._config.endpoint),
+            "aws_access_key_id": self._config.access_key,
+            "aws_secret_access_key": self._config.secret_key.get_secret_value(),
+            "region_name": self._config.region,
             "config": Config(s3={"addressing_style": "path"}),
         }
 
@@ -80,7 +78,7 @@ class S3Writer:
                 Key=s3_key,
                 Body=data,
                 ContentType="text/csv",
-                Metadata={"domain": prefix, "original-filename": filename},
+                Metadata={"original-filename": filename},
             )
 
             logger.info(f"Uploaded to s3://{bucket_name}/{s3_key}")

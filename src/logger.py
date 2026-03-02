@@ -1,7 +1,9 @@
 import logging
 import sys
 from typing import Optional
-from src.config import settings
+from src.config import Settings
+
+global_settings = Settings()
 
 
 class LoggerFactory:
@@ -24,7 +26,7 @@ class LoggerFactory:
         if cls._handler is None:
             cls._handler = cls._create_handler()
 
-        log_level = getattr(logging, settings.log_level)
+        log_level = getattr(logging, global_settings.log_level)
 
         logger.setLevel(log_level)
         logger.addHandler(cls._handler)
