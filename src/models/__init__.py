@@ -6,6 +6,7 @@ from .response import (
     LivenessResponse,
     WebhookResponse,
     AvroOCFResponse,
+    VersionResponse,
 )
 from .openmetadata import SampleData, WebhookTableCreated, WebhookTableUpdated
 
@@ -18,6 +19,7 @@ __all__ = [
     "LivenessResponse",
     "WebhookResponse",
     "AvroOCFResponse",
+    "VersionResponse",
     "SampleData",
     "WebhookTableCreated",
     "WebhookTableUpdated",
