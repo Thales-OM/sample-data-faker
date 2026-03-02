@@ -1,6 +1,6 @@
 ARG PYTHON_VERSION=3.11
 
-FROM docker-hub-proxy.wildberries.ru/library/python:${PYTHON_VERSION}-slim
+FROM harbor.wildberries.ru/devops/ci/base-images/python:${PYTHON_VERSION}-slim
 
 # Установка nexus репозитория
 ARG NEXUS_PROXY=https://nexus-proxy.wb.ru 

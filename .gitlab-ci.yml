@@ -2,7 +2,7 @@
 .template_repo: &repo
   project: &ci_tmpl 'devops/ci/templates'
   # Pipeline version, keep it up to date: https://gitlab.wildberries.ru/devops/ci/templates/-/releases
-  ref: &ci_tmpl_vers 'v3.28.1'
+  ref: &ci_tmpl_vers 'v3.31.0'
 
 variables:
   # Mandatory vars. Don't change or delete
