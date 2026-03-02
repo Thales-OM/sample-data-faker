@@ -43,19 +43,15 @@ async def generate_synthetic(
             detail="Table not found in OpenMetadata",
         )
     table_id = table["id"]
-    try:
-        future = worker.submit(
-            source=body.source,
-            output_size=body.output_size,
-            synthesizer_cls=settings.sdv_model_class,
-            load_limit=body.load_limit,
-        )
-        synthetic_df_wrap: DataFrameWrapper = await future
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+    
+    future = worker.submit(
+        source=body.source,
+        output_size=body.output_size,
+        synthesizer_cls=settings.sdv_model_class,
+        load_limit=body.load_limit,
+    )
+    asyncio_future = asyncio.wrap_future(future)
+    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
 
     sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
     await omd_async_client.add_sample_data(id=table_id, body=sample_data)
@@ -123,20 +119,14 @@ async def webhook(
         config=trino_config,
     )
 
-    try:
-        future = worker.submit(
-            source=trino_source,
-            output_size=DEFAULT_OUTPUT_SIZE,
-            synthesizer_cls=settings.sdv_model_class,
-            load_limit=DEFAULT_SAMPLE_SIZE,
-        )  # May block up to 5s if at capacity
-        asyncio_future = asyncio.wrap_future(future)
-        synthetic_df_wrap: DataFrameWrapper = await asyncio_future
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+    future = worker.submit(
+        source=trino_source,
+        output_size=DEFAULT_OUTPUT_SIZE,
+        synthesizer_cls=settings.sdv_model_class,
+        load_limit=DEFAULT_SAMPLE_SIZE,
+    )  # May block up to 5s if at capacity
+    asyncio_future = asyncio.wrap_future(future)
+    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
 
     sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
     await omd_async_client.add_sample_data(id=table_id, body=sample_data)
