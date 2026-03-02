@@ -93,20 +93,20 @@ async def generation_error_handler(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         details={
             # Safe to expose: high-level error category
-            "category": _categorize_generation_error(exc.original_exception),
+            "category": _categorize_generation_error(exc.cause),
         },
     )
 
     # Log full error server-side (with stack trace)
     logger.error(
         f"Synthetic generation failed: {exc}",
-        exc_info=exc.original_exception,
+        exc_info=exc.cause,
         extra={
             "path": request.url.path,
             "method": request.method,
             "error_type": (
-                type(exc.original_exception).__name__
-                if exc.original_exception
+                type(exc.cause).__name__
+                if exc.cause
                 else "Unknown"
             ),
         },

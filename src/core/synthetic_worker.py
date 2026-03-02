@@ -96,7 +96,7 @@ class SyntheticDataWorker(Singleton):
         except Exception as e:
             logger.exception("Generation failed")
             raise GenerationError(
-                f"Synthetic generation failed: {str(e)}", original_exception=e
+                f"Synthetic generation failed: {str(e)}", cause=e
             ) from e
 
     def _generate_synthetic_data(
