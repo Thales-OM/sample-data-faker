@@ -1,4 +1,5 @@
 from typing import Union, Annotated
+import asyncio
 from fastapi import Depends, APIRouter, status, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import Field
@@ -12,10 +13,10 @@ from src.models import (
     WebhookResponse,
 )
 from src.destinations.openmetadata import AsyncOMDClient
-from src.app.deps import get_worker_queue, get_omd_async_client
 from src.sources.trino import TrinoSource, TrinoSourceConfig
 from src.utils import openmetadata_to_dto_table
-from src.config import DEFAULT_SAMPLE_SIZE, DEFAULT_OUTPUT_SIZE, settings
+from src.config import DEFAULT_SAMPLE_SIZE, DEFAULT_OUTPUT_SIZE, Settings
+from ...deps import get_worker_queue, get_omd_async_client, get_app_settings
 
 
 router = APIRouter(prefix="/openmetadata")
@@ -27,10 +28,11 @@ router = APIRouter(prefix="/openmetadata")
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_synthetic(
-    request: SyntheticRequest,
+    body: SyntheticRequest,
     table_fqn: str,
     omd_async_client: AsyncOMDClient = Depends(get_omd_async_client),
     worker: SyntheticDataWorker = Depends(get_worker_queue),
+    settings: Settings = Depends(get_app_settings),
 ):
     table = await omd_async_client.get_table_by_name(
         fqn=table_fqn, fields="id", nullable=True
@@ -42,10 +44,11 @@ async def generate_synthetic(
         )
     table_id = table["id"]
     try:
-        future = await worker.enqueue_request(
-            source=request.source,
-            output_size=request.output_size,
-            load_limit=request.load_limit,
+        future = await worker.submit(
+            source=body.source,
+            output_size=body.output_size,
+            synthesizer_cls=settings.sdv_model_class,
+            load_limit=body.load_limit,
         )
         synthetic_df_wrap: DataFrameWrapper = await future
     except Exception as e:
@@ -73,6 +76,7 @@ async def webhook(
     body: WebhookTableUnionType,
     omd_async_client: AsyncOMDClient = Depends(get_omd_async_client),
     worker: SyntheticDataWorker = Depends(get_worker_queue),
+    settings: Settings = Depends(get_app_settings),
 ):
     if isinstance(body, WebhookTableUpdated) and not body.is_schema_change():
         return JSONResponse(
@@ -80,7 +84,7 @@ async def webhook(
             content=WebhookResponse(message="received, no action needed"),
         )
 
-    if not settings.trino:
+    if not settings.trino_source:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Trino connection is unavailable",
@@ -98,16 +102,16 @@ async def webhook(
     table_fqn = table["fullyQualifiedName"]
 
     dto_table_full_name = openmetadata_to_dto_table(
-        table_fqn=table_fqn, trino_catalog=settings.trino.catalog
+        table_fqn=table_fqn, trino_catalog=settings.trino_source.catalog
     )
     catalog, schema, table_name = dto_table_full_name.split(".")
     trino_config = TrinoSourceConfig(
-        host=settings.trino.host,
-        port=settings.trino.port,
-        user=settings.trino.user,
+        host=settings.trino_source.host,
+        port=settings.trino_source.port,
+        user=settings.trino_source.user,
         password=(
-            settings.trino.password.get_secret_value()
-            if settings.trino.password
+            settings.trino_source.password.get_secret_value()
+            if settings.trino_source.password
             else None
         ),
         catalog=catalog,
@@ -120,12 +124,14 @@ async def webhook(
     )
 
     try:
-        future = await worker.enqueue_request(
+        future = worker.submit(
             source=trino_source,
             output_size=DEFAULT_OUTPUT_SIZE,
+            synthesizer_cls=settings.sdv_model_class,
             load_limit=DEFAULT_SAMPLE_SIZE,
-        )
-        synthetic_df_wrap: DataFrameWrapper = await future
+        )  # May block up to 5s if at capacity
+        asyncio_future = asyncio.wrap_future(future)
+        synthetic_df_wrap: DataFrameWrapper = await asyncio_future
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

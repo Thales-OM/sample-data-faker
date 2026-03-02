@@ -3,22 +3,22 @@ from .base import DataSource, DataSourceConfig
 from . import register_source
 import pandas as pd
 import s3fs
-from src.config import settings
+from src.config import Settings
 from src.logger import LoggerFactory
 from typing import Optional, Literal
 
+
 logger = LoggerFactory.getLogger(__name__)
+gloabal_settings = Settings()
 
 
 class S3SourceConfig(DataSourceConfig):
     path: str = Field(..., description="S3 URI, e.g., s3://bucket/prefix/")
-    aws_access_key_id: Optional[str] = Field(
-        None, description="Override global AWS access key"
+    access_key: Optional[str] = Field(None, description="Override global access key")
+    secret_key: Optional[SecretStr] = Field(
+        None, description="Override global secret key"
     )
-    aws_secret_access_key: Optional[SecretStr] = Field(
-        None, description="Override global AWS secret key"
-    )
-    region_name: Optional[str] = Field(None, description="AWS region (e.g., us-west-2)")
+    region: Optional[str] = Field(None, description="AWS region (e.g., us-east-1)")
     endpoint_url: Optional[str] = Field(
         None, description="Custom S3 endpoint (for minio, etc.)"
     )
@@ -41,24 +41,27 @@ class S3Source(DataSource):
 
         # Build S3 args: source config > global settings
         s3_kwargs = {}
-        if self.config.aws_access_key_id or self.config.aws_secret_access_key:
+        if self.config.access_key or self.config.secret_key:
             s3_kwargs.update(
-                key=self.config.aws_access_key_id or settings.aws_access_key_id,
+                key=self.config.access_key or gloabal_settings.aws_access_key_id,
                 secret=(
-                    self.config.aws_secret_access_key.get_secret_value()
-                    if self.config.aws_secret_access_key
-                    else settings.aws_secret_access_key
+                    self.config.secret_key.get_secret_value()
+                    if self.config.secret_key
+                    else gloabal_settings.aws_secret_access_key
                 ),
             )
-        elif settings.aws_access_key_id and settings.aws_secret_access_key:
+        elif (
+            gloabal_settings.aws_access_key_id
+            and gloabal_settings.aws_secret_access_key
+        ):
             s3_kwargs.update(
-                key=settings.aws_access_key_id,
-                secret=settings.aws_secret_access_key,
+                key=gloabal_settings.aws_access_key_id,
+                secret=gloabal_settings.aws_secret_access_key,
             )
 
-        if self.config.region_name or settings.aws_region:
+        if self.config.region or gloabal_settings.aws_region:
             s3_kwargs["client_kwargs"] = {
-                "region_name": self.config.region_name or settings.aws_region
+                "region_name": self.config.region or gloabal_settings.aws_region
             }
 
         if self.config.endpoint_url:
