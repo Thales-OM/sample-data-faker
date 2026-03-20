@@ -2,7 +2,7 @@ from fastapi import FastAPI, status, APIRouter, Depends, HTTPException, Request
 from src.metrics.middleware import MetricsMiddleware
 from src.core import SyntheticDataWorker
 from src.models import ReadinessResponse, LivenessResponse, VersionResponse
-from src.config import APP_VERSION
+from src.config import Settings
 from .lifespan import lifespan
 from .api import router as api_router
 from .deps import get_worker_queue
@@ -51,8 +51,14 @@ def create_app() -> FastAPI:
     - Routers
     - Dependencies
     """
+    settings = Settings()
+
     app = FastAPI(
-        title="Synthetic Data Generator", lifespan=lifespan, version=APP_VERSION
+        title="Synthetic Data Generator",
+        lifespan=lifespan,
+        version=settings.fastapi.version,
+        root_path=settings.fastapi.root_path,
+        root_path_in_servers=False,
     )
 
     app.add_middleware(MetricsMiddleware)
