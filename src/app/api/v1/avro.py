@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, File, UploadFile, HTTPException, status, Depends, Form
 from src.logger import LoggerFactory
 from src.config import Settings, DEFAULT_OUTPUT_SIZE
-from src.destinations.s3 import S3Writer
+from src.destinations.s3 import S3Destination, FileFormat
 from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.sources.avro_ocf import AvroOCFSourceConfig, AvroOCFSource
 from ....models import AvroOCFResponse
@@ -47,14 +47,14 @@ async def generate_from_avro(
         asyncio_future = asyncio.wrap_future(future)
         synthetic_df_wrap: DataFrameWrapper = await asyncio_future
 
-        s3_object_key = await S3Writer(config=settings.s3_destination).upload(
+        s3_response = await S3Destination(config=settings.s3_destination).submit(
             df=synthetic_df_wrap.df_clean,
             filename=avro_ocf_source.title,
             prefix=avro_ocf_source.namespace,
-            format="csv",
+            format=FileFormat.CSV,
         )
 
-        return AvroOCFResponse(message="ok", s3_path=s3_object_key)
+        return AvroOCFResponse(message="ok", s3_path=s3_response.s3_key)
 
     except Exception as e:
         raise HTTPException(
