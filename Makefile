@@ -17,4 +17,4 @@ docker_run:
 	docker run -p 8000:8000 sample-data-faker
 
 compose_up:
-	docker-compose -f deploy/docker-compose.yml up --build --scale worker=2 -d
+	docker-compose -f docker-compose.dev.yml up --build --scale worker=2 -d
