@@ -14,7 +14,7 @@
 
 ### Требования
 
-- Python 3.10+
+- Python 3.11+
 - Docker (опционально, для запуска в контейнере)
 
 ### Установка зависимостей
@@ -50,6 +50,9 @@ S3_DESTINATION__ACCESS_KEY=minioadmin
 S3_DESTINATION__SECRET_KEY=minioadmin
 S3_DESTINATION__REGION=us-east-1
 S3_DESTINATION__BUCKET=dto-sample-data
+
+# FastAPI app args
+FASTAPI__ROOT_PATH=""
 ```
 
 ### Запуск через Python
@@ -91,14 +94,14 @@ make compose_up
 
 | Endpoint | Метод | Описание |
 |----------|-------|----------|
-| `/table/generate` | POST | Генерация синтетических данных из указанного источника |
-| `/openmetadata/generate/{table_fqn}` | POST | Генерация данных и загрузка в OpenMetadata для указанной таблицы |
-| `/openmetadata/webhook` | POST | Webhook для автоматической генерации данных при изменении схемы в OpenMetadata |
-| `/avro/ocf` | POST | Генерация данных из Avro OCF файла с загрузкой результата в S3 |
+| `/api/v1/table/generate` | POST | Генерация синтетических данных из указанного источника |
+| `/api/v1/openmetadata/generate/{table_fqn}` | POST | Генерация данных и загрузка в OpenMetadata для указанной таблицы |
+| `/api/v1/openmetadata/webhook` | POST | Webhook для автоматической генерации данных при изменении схемы в OpenMetadata |
+| `/api/v1/dto/avro-ocf` | POST | Генерация данных из Avro OCF файла с загрузкой результата в S3 |
 
 ### Параметры запросов
 
-**`/table/generate`** и **`/openmetadata/generate/{table_fqn}`** принимают:
+**`/api/v1/table/generate`** и **`/api/v1/openmetadata/generate/{table_fqn}`** принимают:
 
 ```json
 {
@@ -108,7 +111,7 @@ make compose_up
 }
 ```
 
-**`/avro/ocf`** принимает:
+**`/api/v1/dto/avro-ocf`** принимает:
 
 - `file` — Avro OCF файл (.avro)
 - `output_size` — максимальное количество записей для генерации (1-10000)

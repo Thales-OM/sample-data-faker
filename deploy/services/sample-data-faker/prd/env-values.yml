@@ -30,3 +30,6 @@ vault:
       vault_secret_key: dotenv
       mount_dir: /etc/env
       mount_file: .env
+  env:
+    - name: FASTAPI__ROOT_PATH
+      value: "/{{ .Helm.Release.Name }}"

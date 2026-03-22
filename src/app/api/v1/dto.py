@@ -13,11 +13,11 @@ from ...deps import get_worker_queue, get_app_settings
 logger = LoggerFactory.getLogger(__name__)
 
 
-router = APIRouter(prefix="/avro")
+router = APIRouter(prefix="/dto")
 
 
 @router.post(
-    "/ocf",
+    "/avro-ocf",
     response_model=AvroOCFResponse,
     status_code=status.HTTP_201_CREATED,
 )

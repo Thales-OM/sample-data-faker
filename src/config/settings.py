@@ -6,6 +6,7 @@ from .constants import (
     DEFAULT_LOG_LEVEL,
     BaseSynthesizer,
     SYNTHESIZER_MAP,
+    APP_VERSION,
 )
 
 
@@ -64,6 +65,11 @@ class ResourceSettings(BaseSettings):
     request_timeout_seconds: int = 300
 
 
+class FatAPISettings(BaseSettings):
+    root_path: str = ""
+    version: str = APP_VERSION
+
+
 class Settings(BaseSettings):
     # Default source configs
     s3_source: Optional[S3SourceConfig] = None
@@ -72,6 +78,9 @@ class Settings(BaseSettings):
     # Default publish destinations
     openmetadata_destination: Optional[OMDConfig] = None
     s3_destination: Optional[S3DestinationConfig] = None
+
+    # FastAPI app settings
+    fastapi: FatAPISettings = FatAPISettings()
 
     # SDV & queue
     max_workers: int = 2
