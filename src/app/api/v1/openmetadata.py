@@ -43,7 +43,7 @@ async def generate_synthetic(
             detail="Table not found in OpenMetadata",
         )
     table_id = table["id"]
-    
+
     future = worker.submit(
         source=body.source,
         output_size=body.output_size,

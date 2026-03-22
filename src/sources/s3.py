@@ -9,7 +9,7 @@ from typing import Optional, Literal
 
 
 logger = LoggerFactory.getLogger(__name__)
-gloabal_settings = Settings()
+global_settings = Settings()
 
 
 class S3SourceConfig(DataSourceConfig):
@@ -43,25 +43,25 @@ class S3Source(DataSource):
         s3_kwargs = {}
         if self.config.access_key or self.config.secret_key:
             s3_kwargs.update(
-                key=self.config.access_key or gloabal_settings.s3_source.access_key,
+                key=self.config.access_key or global_settings.s3_source.access_key,
                 secret=(
                     self.config.secret_key.get_secret_value()
                     if self.config.secret_key
-                    else gloabal_settings.s3_source.secret_key.get_secret_value()
+                    else global_settings.s3_source.secret_key.get_secret_value()
                 ),
             )
         elif (
-            gloabal_settings.s3_source.access_key
-            and gloabal_settings.s3_source.secret_key
+            global_settings.s3_source.access_key
+            and global_settings.s3_source.secret_key
         ):
             s3_kwargs.update(
-                key=gloabal_settings.s3_source.access_key,
-                secret=gloabal_settings.s3_source.secret_key,
+                key=global_settings.s3_source.access_key,
+                secret=global_settings.s3_source.secret_key,
             )
 
-        if self.config.region or gloabal_settings.s3_source.region:
+        if self.config.region or global_settings.s3_source.region:
             s3_kwargs["client_kwargs"] = {
-                "region_name": self.config.region or gloabal_settings.s3_source.region
+                "region_name": self.config.region or global_settings.s3_source.region
             }
 
         if self.config.endpoint_url:
