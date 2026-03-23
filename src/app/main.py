@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         version=settings.fastapi.version,
         root_path=settings.fastapi.root_path,
-        root_path_in_servers=False,
+        root_path_in_servers=True,
     )
 
     app.add_middleware(MetricsMiddleware)
