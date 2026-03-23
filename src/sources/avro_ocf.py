@@ -1,6 +1,7 @@
 from typing import Literal, Optional, Dict, Tuple, Any
+from io import BytesIO
 from pydantic import Field, PrivateAttr, field_validator
-from fastapi import UploadFile, HTTPException, status
+from fastapi import HTTPException, status
 import fastavro
 import pandas as pd
 from src.logger import LoggerFactory
@@ -12,17 +13,21 @@ logger = LoggerFactory.getLogger(__name__)
 
 
 class AvroOCFSourceConfig(DataSourceConfig):
-    file: UploadFile = Field(..., description="Avro OCF file (.avro)")
+    file_content: bytes = Field(..., description="Avro OCF file content as raw bytes")
+    filename: Optional[str] = Field(
+        None, description="Original filename for extension validation"
+    )
 
-    @field_validator("file", mode="after")
-    def validate_extension(file: UploadFile) -> UploadFile:
-        """Validate filename extension"""
-        if not file.filename or not file.filename.endswith(".avro"):
+    @field_validator("filename", mode="after")
+    @classmethod
+    def validate_extension(cls, filename: Optional[str]) -> Optional[str]:
+        """Validate filename extension if provided"""
+        if filename and not filename.lower().endswith(".avro"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File must have .avro extension",
             )
-        return file
+        return filename
 
 
 # FIXME: risks storing heavy datasets in memory, implement dump to file until worker picks up the task
@@ -51,27 +56,24 @@ class AvroOCFSource(DataSource):
         return self._namespace
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
-        file = self.config.file
+        file_stream = BytesIO(self.config.file_content)
 
-        # Reset file pointer to start (UploadFile may be at end after validation)
-        file.file.seek(0)
-
-        magic_bytes = file.file.read(4)
+        # Validate Avro magic bytes (first 4 bytes must be b'Obj\x01')
+        magic_bytes = file_stream.read(4)
         if not self.validate_avro_magic(content=magic_bytes):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid Avro file: Missing or incorrect magic bytes (expected b'Obj\\x01')",
             )
 
-        # Reset pointer again for fastavro reader
-        file.file.seek(0)
+        # Reset pointer for fastavro reader
+        file_stream.seek(0)
 
         # Parse Avro OCF - fastavro auto-detects codec from header (snappy, deflate, null, etc.)
         try:
-            avro_reader = fastavro.reader(file.file)
+            avro_reader = fastavro.reader(file_stream)
             schema = avro_reader.writer_schema
 
-            # Log detected codec for debugging
             codec = getattr(avro_reader, "codec", "null")
             logger.info(f"Reading Avro OCF with codec: {codec}")
 
@@ -83,12 +85,12 @@ class AvroOCFSource(DataSource):
             if not isinstance(schema, dict):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unexpected schema format in Avro file. Expected dict, got {type(schema)}",
+                    detail=f"Unexpected schema format. Expected dict, got {type(schema)}",
                 )
 
             self._namespace, self._title = self._parse_name(schema=schema)
 
-            # Stream records with limit
+            # Stream records with optional limit
             records = []
             for i, record in enumerate(avro_reader):
                 records.append(record)
@@ -99,26 +101,23 @@ class AvroOCFSource(DataSource):
                 raise HTTPException(
                     status_code=400, detail="Avro file contains no records"
                 )
+
         except HTTPException:
-            # Propagate formed HTTPException
             raise
         except Exception as e:
-            logger.error(f"Avro read error (possible codec issue): {e}")
+            logger.error(f"Avro read error: {e}", exc_info=True)
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to read Avro file. Ensure compression codec is supported (snappy/deflate). Error: {str(e)}",
+                detail=f"Failed to read Avro file. Ensure codec is supported (snappy/deflate). Error: {str(e)}",
             )
 
-        # Convert to DataFrame
         try:
-            df = pd.DataFrame(records)
+            return pd.DataFrame(records)
         except Exception as e:
-            logger.error(f"DataFrame conversion failed: {e}")
+            logger.error(f"DataFrame conversion failed: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500, detail=f"DataFrame conversion failed: {str(e)}"
             )
-
-        return df
 
     @staticmethod
     def _parse_name(schema: Dict[str, Any]) -> Tuple[str, str]:
@@ -143,5 +142,5 @@ class AvroOCFSource(DataSource):
 
     @staticmethod
     def validate_avro_magic(content: bytes) -> bool:
-        """Check if content starts with Avro OCF magic bytes."""
+        """Check for Avro OCF magic bytes."""
         return len(content) >= 4 and content[:4] == b"Obj\x01"

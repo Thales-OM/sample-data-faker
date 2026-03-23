@@ -1,12 +1,11 @@
-from typing import Optional
 import asyncio
-from fastapi import APIRouter, File, UploadFile, HTTPException, status, Depends, Form
+from fastapi import APIRouter, HTTPException, status, Depends
 from src.logger import LoggerFactory
-from src.config import Settings, DEFAULT_OUTPUT_SIZE
+from src.config import Settings
 from src.destinations.s3 import S3Destination, FileFormat
 from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.sources.avro_ocf import AvroOCFSourceConfig, AvroOCFSource
-from ....models import AvroOCFResponse
+from ....models import DTOAvroOCFRequest, AvroOCFResponse
 from ...deps import get_worker_queue, get_app_settings
 
 
@@ -22,29 +21,24 @@ router = APIRouter(prefix="/dto")
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_from_avro(
-    file: UploadFile = File(..., description="Avro OCF file (.avro)"),
-    output_size: int = Form(
-        DEFAULT_OUTPUT_SIZE,
-        ge=1,
-        le=10000,
-        description="Max records to produce in output",
-    ),
-    load_limit: Optional[int] = Form(
-        None, ge=1, description="Max records to sample from file"
-    ),
+    body: DTOAvroOCFRequest,
     worker: SyntheticDataWorker = Depends(get_worker_queue),
     settings: Settings = Depends(get_app_settings),
 ):
-    logger.info(f"Received file upload: size={file.size}, content_type={file.content_type}")
+    logger.info(
+        f"Received raw bytes: size={len(body.file_content):,}, filename={body.filename}"
+    )
     try:
-        avro_ocf_source = AvroOCFSource(config=AvroOCFSourceConfig(file=file))
+        avro_ocf_source = AvroOCFSource(
+            config=AvroOCFSourceConfig(file_content=body.file_content)
+        )
 
         future = worker.submit(
             source=avro_ocf_source,
-            output_size=output_size,
+            output_size=body.output_size,
             synthesizer_cls=settings.sdv_model_class,
-            load_limit=load_limit,
-        )  # May block up to 5s if at capacity
+            load_limit=body.load_limit,
+        )  # May block up to 1m if at capacity
         asyncio_future = asyncio.wrap_future(future)
         synthetic_df_wrap: DataFrameWrapper = await asyncio_future
 
