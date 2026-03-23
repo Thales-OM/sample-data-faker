@@ -49,12 +49,12 @@ service:
       protocol: TCP
       name: http
 
-certManager:
-  certificate:
-    enabled: true
-    commonName: {{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}
-    duration: 48h # срок действия сертификата
-    renewBefore: 36h # за сколько до окончания срока действия нужно обновить сертификат
+# certManager:
+#   certificate:
+#     enabled: true
+#     commonName: {{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}
+#     duration: 48h # срок действия сертификата
+#     renewBefore: 36h # за сколько до окончания срока действия нужно обновить сертификат
 
 chartMeta:
   owner: pugin.ilya
