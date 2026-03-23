@@ -22,7 +22,9 @@ router = APIRouter(prefix="/dto")
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_from_avro(
-    file: bytes = File(..., description="Avro OCF file (.avro)"),
+    file: bytes = File(
+        ..., media_type="application/octet-stream", description="Avro OCF file (.avro)"
+    ),
     filename: Optional[str] = Form(None, description="Original filename"),
     output_size: int = Form(
         DEFAULT_OUTPUT_SIZE,
