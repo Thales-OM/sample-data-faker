@@ -70,8 +70,8 @@ class TestAvroOCFSourceConfig:
                 file=f,
                 content_type="application/octet-stream",
             )
-            config = AvroOCFSourceConfig(file=upload_file)
-            assert config.file.filename == "test.avro"
+            config = AvroOCFSourceConfig(file_content=upload_file)
+            assert config.file_content.filename == "test.avro"
 
     def test_invalid_extension(self):
         """Test that non-.avro extension raises error."""
@@ -84,7 +84,7 @@ class TestAvroOCFSourceConfig:
         )
         
         with pytest.raises(HTTPException, match="400"):
-            AvroOCFSourceConfig(file=upload_file)
+            AvroOCFSourceConfig(file_content=upload_file)
 
     def test_no_extension(self):
         """Test that missing extension raises error."""
@@ -97,7 +97,7 @@ class TestAvroOCFSourceConfig:
         )
         
         with pytest.raises(HTTPException, match="400"):
-            AvroOCFSourceConfig(file=upload_file)
+            AvroOCFSourceConfig(file_content=upload_file)
 
 
 @pytest.mark.unit
@@ -112,7 +112,7 @@ class TestAvroOCFSource:
                 file=f,
                 content_type="application/octet-stream",
             )
-            config = AvroOCFSourceConfig(file=upload_file)
+            config = AvroOCFSourceConfig(file_content=upload_file)
             source = AvroOCFSource(config=config)
             
             assert source.type == "avro-ocf"
@@ -125,7 +125,7 @@ class TestAvroOCFSource:
                 file=f,
                 content_type="application/octet-stream",
             )
-            config = AvroOCFSourceConfig(file=upload_file)
+            config = AvroOCFSourceConfig(file_content=upload_file)
             source = AvroOCFSource(config=config)
             
             df = source.load_dataframe()
@@ -143,7 +143,7 @@ class TestAvroOCFSource:
                 file=f,
                 content_type="application/octet-stream",
             )
-            config = AvroOCFSourceConfig(file=upload_file)
+            config = AvroOCFSourceConfig(file_content=upload_file)
             source = AvroOCFSource(config=config)
             
             df = source.load_dataframe(limit=2)
@@ -158,7 +158,7 @@ class TestAvroOCFSource:
                 file=f,
                 content_type="application/octet-stream",
             )
-            config = AvroOCFSourceConfig(file=upload_file)
+            config = AvroOCFSourceConfig(file_content=upload_file)
             source = AvroOCFSource(config=config)
             
             # Before loading, accessing title/namespace should raise error
@@ -180,7 +180,7 @@ class TestAvroOCFSource:
             file=io.BytesIO(b"NOT_A_VALID_AVRO_FILE"),
             content_type="application/octet-stream",
         )
-        config = AvroOCFSourceConfig(file=upload_file)
+        config = AvroOCFSourceConfig(file_content=upload_file)
         source = AvroOCFSource(config=config)
         
         with pytest.raises(HTTPException, match="Invalid Avro file"):
@@ -207,7 +207,7 @@ class TestAvroOCFSource:
             file=buf,
             content_type="application/octet-stream",
         )
-        config = AvroOCFSourceConfig(file=upload_file)
+        config = AvroOCFSourceConfig(file_content=upload_file)
         source = AvroOCFSource(config=config)
         
         with pytest.raises(HTTPException, match="no records"):
