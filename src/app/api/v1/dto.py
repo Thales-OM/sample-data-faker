@@ -35,6 +35,7 @@ async def generate_from_avro(
     worker: SyntheticDataWorker = Depends(get_worker_queue),
     settings: Settings = Depends(get_app_settings),
 ):
+    logger.info(f"Received file upload: size={file.size}, content_type={file.content_type}")
     try:
         avro_ocf_source = AvroOCFSource(config=AvroOCFSourceConfig(file=file))
 
