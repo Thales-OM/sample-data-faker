@@ -1,7 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, HttpUrl, field_validator
-from typing import Optional, Dict
-from src.constants import *
+from typing import Optional, Type
+from .constants import (
+    SDVSynthesizer,
+    DEFAULT_LOG_LEVEL,
+    BaseSynthesizer,
+    SYNTHESIZER_MAP,
+    APP_VERSION,
+)
 
 
 class TrinoConnectionConfig(BaseSettings):
@@ -33,26 +39,58 @@ class OMDConfig(BaseSettings):
         return HttpUrl(str(v).rstrip("/"))
 
 
-class Settings(BaseSettings):
-    # Global AWS (fallback)
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[SecretStr] = None
-    aws_region: Optional[str] = None
+class BaseS3Config(BaseSettings):
+    endpoint: Optional[HttpUrl] = Field(
+        None, description="Custom S3 endpoint (for minio, etc.)"
+    )
+    access_key: str
+    secret_key: SecretStr = Field(exclude=True)
+    region: str = Field("us-east-1", description="AWS region (e.g., us-east-1)")
+    bucket: str
 
-    # Trino
-    trino: Optional[TrinoConnectionConfig] = None
+
+class S3DestinationConfig(BaseS3Config):
+    key: Optional[str] = Field(
+        None,
+        description="Path to save the file to. When left blank - constructed automatically",
+    )
+
+
+class S3SourceConfig(BaseS3Config):
+    key: str = Field(None, description="Path to read the file from")
+
+
+class ResourceSettings(BaseSettings):
+    max_concurrent_generations: int = 4
+    request_timeout_seconds: int = 300
+
+
+class FatAPISettings(BaseSettings):
+    root_path: str = ""
+    version: str = APP_VERSION
+
+
+class Settings(BaseSettings):
+    # Default source configs
+    s3_source: Optional[S3SourceConfig] = None
+    trino_source: Optional[TrinoConnectionConfig] = None
+
+    # Default publish destinations
+    openmetadata_destination: Optional[OMDConfig] = None
+    s3_destination: Optional[S3DestinationConfig] = None
+
+    # FastAPI app settings
+    fastapi: FatAPISettings = FatAPISettings()
 
     # SDV & queue
-    max_concurrent_synthetic_jobs: int = 2
+    max_workers: int = 2
+    max_pending: int = 3
     sdv_model_type: SDVSynthesizer = SDVSynthesizer.GAUSSIAN_COPULA
     sdv_model_params: dict = {}
     cleanup_on_complete: bool = True
 
     # Logging
     log_level: str = DEFAULT_LOG_LEVEL
-
-    # OpenMetadata
-    openmetadata: Optional[OMDConfig] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -67,12 +105,11 @@ class Settings(BaseSettings):
         if not (synthesizer_class := SYNTHESIZER_MAP.get(v, None)):
             raise KeyError("Synthesizer is declared but is missing a class mapping")
         if not issubclass(synthesizer_class, BaseSynthesizer):
-            raise ValueError("Synthesizer is misdeclared, not an subclass from BaseSynthesizer")
+            raise ValueError(
+                "Synthesizer is misdeclared, not an subclass from BaseSynthesizer"
+            )
         return v
-    
+
     @property
-    def sdv_model_class(self) -> BaseSynthesizer:
+    def sdv_model_class(self) -> Type[BaseSynthesizer]:
         return SYNTHESIZER_MAP[self.sdv_model_type]
-
-
-settings = Settings()

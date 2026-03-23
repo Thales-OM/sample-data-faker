@@ -1,8 +1,9 @@
-from fastapi import Depends, APIRouter, status, HTTPException
-import pandas as pd
-from src.core.synthetic_worker import SyntheticDataWorker
+import asyncio
+from fastapi import Depends, APIRouter, status
+from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.models import SyntheticRequest, SyntheticResponse
-from src.app.deps import get_worker_queue
+from src.config import Settings
+from ...deps import get_worker_queue, get_app_settings
 import json
 
 
@@ -15,22 +16,22 @@ router = APIRouter(prefix="/table")
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_synthetic(
-    request: SyntheticRequest, worker: SyntheticDataWorker = Depends(get_worker_queue)
+    request: SyntheticRequest,
+    worker: SyntheticDataWorker = Depends(get_worker_queue),
+    settings: Settings = Depends(get_app_settings),
 ):
-    try:
-        future = await worker.enqueue_request(
-            source=request.source,
-            output_size=request.output_size,
-            load_limit=request.load_limit,
+    future = worker.submit(
+        source=request.source,
+        output_size=request.output_size,
+        synthesizer_cls=settings.sdv_model_class,
+        load_limit=request.load_limit,
+    )
+    asyncio_future = asyncio.wrap_future(future)
+    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+
+    # FIXME: heavy dataframe to json conversion
+    return json.loads(
+        synthetic_df_wrap.df_clean.to_json(
+            orient="records", date_format="iso", index=False
         )
-        synthetic_df: pd.DataFrame = await future
-        return json.loads(synthetic_df.to_json(orient="records"))
-    except Exception as e:
-        raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-                if "validation" in str(e).lower()
-                else status.HTTP_500_INTERNAL_SERVER_ERROR
-            ),
-            detail=str(e),
-        )
+    )
