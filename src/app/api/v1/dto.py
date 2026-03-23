@@ -26,11 +26,13 @@ async def generate_from_avro(
     settings: Settings = Depends(get_app_settings),
 ):
     logger.info(
-        f"Received raw bytes: size={len(body.file_content):,}, filename={body.filename}"
+        f"Received raw bytes: size={len(body.file_content)}, filename={body.filename}"
     )
     try:
         avro_ocf_source = AvroOCFSource(
-            config=AvroOCFSourceConfig(file_content=body.file_content)
+            config=AvroOCFSourceConfig(
+                file_content=body.file_content, filename=body.filename
+            )
         )
 
         future = worker.submit(

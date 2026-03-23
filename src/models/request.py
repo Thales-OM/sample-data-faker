@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
-from src.sources import SourceConfig
+from pydantic import BaseModel, Field, Base64Bytes
 from typing import Optional
 from src.config import DEFAULT_OUTPUT_SIZE
+from src.sources import SourceConfig
 
 
 class SyntheticRequest(BaseModel):
@@ -18,18 +18,24 @@ class SyntheticRequest(BaseModel):
 
 
 class DTOAvroOCFRequest(BaseModel):
-    file_content: bytes = Field(..., description="Avro OCF file content as raw bytes")
-    filename: Optional[str] = Field(None, description="Original filename")
+    file_content: Base64Bytes = Field(
+        ..., description="Base64 encoded Avro OCF file content"
+    )
+    filename: Optional[str] = Field(
+        None,
+        examples=["data.avro"],
+        description="Original filename (e.g., 'data.avro')",
+    )
     output_size: int = Field(
         DEFAULT_OUTPUT_SIZE,
         gt=0,
         le=10000,
-        example=100,
+        examples=[100],
         description="How many rows to generate",
     )
     load_limit: Optional[int] = Field(
         None,
         gt=0,
         description="Maximum number of rows to load from the source for training.",
-        example=1000,
+        examples=[1000],
     )
