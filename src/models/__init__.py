@@ -1,4 +1,4 @@
-from .request import SyntheticRequest, DTOAvroOCFRequest
+from .request import SyntheticRequest
 from .response import (
     SyntheticResponse,
     OpenMetadataPopulateResponse,
@@ -13,7 +13,6 @@ from .openmetadata import SampleData, WebhookTableCreated, WebhookTableUpdated
 
 __all__ = [
     "SyntheticRequest",
-    "DTOAvroOCFRequest",
     "SyntheticResponse",
     "OpenMetadataPopulateResponse",
     "ReadinessResponse",
