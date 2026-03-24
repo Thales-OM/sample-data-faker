@@ -10,7 +10,8 @@ services:
 
   worker:
     build: 
-      dockerfile: deploy/services/sample-data-faker/Dockerfile
+      dockerfile: ./Dockerfile
+      context: ..
     environment:
       - MAX_WORKERS=2
       - MAX_PENDING=3
