@@ -22,7 +22,7 @@ class JSONSourceConfig(DataSourceConfig):
 # FIXME: risks storing heavy datasets in memory, implement dump to file until worker picks up the task
 @register_source
 class JSONSource(DataSource):
-    type: Literal["json"] = "json"
+    type: Literal["json"]
     config: JSONSourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:

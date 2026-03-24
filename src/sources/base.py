@@ -10,7 +10,7 @@ class DataSourceConfig(BaseModel):
 
 
 class DataSource(BaseModel, ABC):
-    type: Literal["base"] = "base"
+    type: Literal["base"]
     config: DataSourceConfig
 
     @abstractmethod

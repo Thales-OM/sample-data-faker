@@ -1,6 +1,6 @@
 from typing import Literal, Optional, Dict, Tuple, Any
 from io import BytesIO
-from pydantic import Field, PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr, field_validator, Base64Bytes
 from fastapi import HTTPException, status
 import fastavro
 import pandas as pd
@@ -13,7 +13,7 @@ logger = LoggerFactory.getLogger(__name__)
 
 
 class AvroOCFSourceConfig(DataSourceConfig):
-    file_content: bytes = Field(..., description="Avro OCF file content as raw bytes")
+    file_content: Base64Bytes = Field(..., description="Avro OCF file content as raw bytes")
     filename: Optional[str] = Field(
         None, description="Original filename for extension validation"
     )
@@ -33,7 +33,7 @@ class AvroOCFSourceConfig(DataSourceConfig):
 # FIXME: risks storing heavy datasets in memory, implement dump to file until worker picks up the task
 # TODO: reading potentially large file in sync
 class AvroOCFSource(DataSource):
-    type: Literal["avro-ocf"] = "avro-ocf"
+    type: Literal["avro-ocf"]
     config: AvroOCFSourceConfig
 
     _title: Optional[str] = PrivateAttr(None)
