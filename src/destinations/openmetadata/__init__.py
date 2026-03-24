@@ -1,5 +1,5 @@
 from .client import AsyncOMDClient
-from .source import OpenMetadataDestination, OpenMetadataDestinationResponse
+from .destination import OpenMetadataDestination, OpenMetadataDestinationResponse
 
 
 __all__ = [
