@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, SecretStr, HttpUrl, field_validator
-from typing import Optional, Type
+from pydantic import Field, SecretStr, HttpUrl, field_validator, AnyUrl
+from typing import Optional, Type, Literal
+from .secrets import DumpableSecretsBaseModel
 from .constants import (
     SDVSynthesizer,
     DEFAULT_LOG_LEVEL,
@@ -60,6 +61,24 @@ class S3SourceConfig(BaseS3Config):
     key: str = Field(None, description="Path to read the file from")
 
 
+class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
+    catalog_name: str = Field(serialization_alias="name")
+    type: Literal["hive"] = "hive"
+    uri: AnyUrl = Field(examples=["thrift://hms:9083"])
+    warehouse: str = Field(examples=["s3://my-bucket/warehouse/"])
+    s3_access_key_id: str = Field(serialization_alias="s3.access-key-id")
+    s3_secret_access_key: SecretStr = Field(
+        serialization_alias="s3.secret-access-key",
+    )
+    write_format_default: str = Field(
+        "parquet",
+        serialization_alias="write.format.default",
+    )
+    s3_region: str = Field("us-east-1", serialization_alias="s3.region")
+
+    model_config = SettingsConfigDict(populate_by_name=True)
+
+
 class ResourceSettings(BaseSettings):
     max_concurrent_generations: int = 4
     request_timeout_seconds: int = 300
@@ -78,6 +97,7 @@ class Settings(BaseSettings):
     # Default publish destinations
     openmetadata_destination: Optional[OMDConfig] = None
     s3_destination: Optional[S3DestinationConfig] = None
+    hms_s3_destination: Optional[HMSS3DestinationConfig] = None
 
     # FastAPI app settings
     fastapi: FatAPISettings = FatAPISettings()
