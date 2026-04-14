@@ -4,12 +4,11 @@ Tests for destinations: OpenMetadata client and S3 writer.
 import pytest
 import responses
 import pandas as pd
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from src.destinations.openmetadata import AsyncOMDClient
 from src.destinations.s3 import S3Destination
 from src.config import OMDConfig, S3DestinationConfig
-from src.models import SampleData
+from src.openmetadata import SampleData
 
 
 @pytest.mark.unit
