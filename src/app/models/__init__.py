@@ -8,7 +8,6 @@ from .response import (
     AvroOCFResponse,
     VersionResponse,
 )
-from .openmetadata import SampleData, WebhookTableCreated, WebhookTableUpdated
 
 
 __all__ = [
@@ -21,7 +20,4 @@ __all__ = [
     "WebhookResponse",
     "AvroOCFResponse",
     "VersionResponse",
-    "SampleData",
-    "WebhookTableCreated",
-    "WebhookTableUpdated",
 ]

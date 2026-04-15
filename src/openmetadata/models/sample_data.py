@@ -18,7 +18,7 @@ class SampleData(BaseModel):
                     f"Number of values at row {idx} = {row_len}, number of declared columns = {num_columns}"
                 )
         return self
-    
+
     # FIXME: heavy dataframe to json conversion
     def from_dataframe(df: pd.DataFrame) -> "SampleData":
         df_json = df.to_json(orient="split", date_format="iso", index=False)

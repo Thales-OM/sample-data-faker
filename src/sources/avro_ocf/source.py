@@ -1,43 +1,39 @@
 from typing import Literal, Optional, Dict, Tuple, Any
 from io import BytesIO
-from pydantic import Field, PrivateAttr, field_validator, Base64Bytes
+import base64
+from pydantic import Field, PrivateAttr
 from fastapi import HTTPException, status
 import fastavro
 import pandas as pd
 from src.logger import LoggerFactory
 from src.config import DEFAULT_AVRO_NAMESPACE
-from .base import DataSource, DataSourceConfig
+from .types import AvroBase64Str, AvroFilenameStr
+from ..base import DataSource, DataSourceConfig
+from .. import register_source
 
 
 logger = LoggerFactory.getLogger(__name__)
 
 
 class AvroOCFSourceConfig(DataSourceConfig):
-    file_content: Base64Bytes = Field(..., description="Avro OCF file content as raw bytes")
-    filename: Optional[str] = Field(
+    file_content: AvroBase64Str = Field(
+        ..., description="Avro OCF file content as base64-encoded string"
+    )
+    filename: Optional[AvroFilenameStr] = Field(
         None, description="Original filename for extension validation"
     )
 
-    @field_validator("filename", mode="after")
-    @classmethod
-    def validate_extension(cls, filename: Optional[str]) -> Optional[str]:
-        """Validate filename extension if provided"""
-        if filename and not filename.lower().endswith(".avro"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must have .avro extension",
-            )
-        return filename
 
-
-# FIXME: risks storing heavy datasets in memory, implement dump to file until worker picks up the task
-# TODO: reading potentially large file in sync
+# FIXME: storing heavy datasets in memory, implement dump to file until worker picks up the task
+# Okay for <=100MB uploads, x2 payload size at peak. Otherwise need custom stream wrapper (high cpu, low mem)
+@register_source
 class AvroOCFSource(DataSource):
     type: Literal["avro-ocf"]
     config: AvroOCFSourceConfig
 
     _title: Optional[str] = PrivateAttr(None)
     _namespace: Optional[str] = PrivateAttr(None)
+    _avro_schema: Optional[Dict[str, Any]] = PrivateAttr(None)
 
     @property
     def title(self) -> str:
@@ -55,19 +51,16 @@ class AvroOCFSource(DataSource):
             )
         return self._namespace
 
-    def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
-        file_stream = BytesIO(self.config.file_content)
-
-        # Validate Avro magic bytes (first 4 bytes must be b'Obj\x01')
-        magic_bytes = file_stream.read(4)
-        if not self.validate_avro_magic(content=magic_bytes):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid Avro file: Missing or incorrect magic bytes (expected b'Obj\\x01')",
+    @property
+    def avro_schema(self) -> Dict[str, Any]:
+        if self._avro_schema is None:
+            raise RuntimeError(
+                f"Call .load_dataframe() before addressing .avro_schema property of {self.__class__.__name__} object"
             )
+        return self._avro_schema
 
-        # Reset pointer for fastavro reader
-        file_stream.seek(0)
+    def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
+        file_stream = BytesIO(base64.b64decode(self.config.file_content))
 
         # Parse Avro OCF - fastavro auto-detects codec from header (snappy, deflate, null, etc.)
         try:
@@ -87,6 +80,7 @@ class AvroOCFSource(DataSource):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Unexpected schema format. Expected dict, got {type(schema)}",
                 )
+            self._avro_schema = schema
 
             self._namespace, self._title = self._parse_name(schema=schema)
 
@@ -139,8 +133,3 @@ class AvroOCFSource(DataSource):
             DEFAULT_AVRO_NAMESPACE if len(full_name_split) < 2 else full_name_split[0]
         )
         return namespace, title
-
-    @staticmethod
-    def validate_avro_magic(content: bytes) -> bool:
-        """Check for Avro OCF magic bytes."""
-        return len(content) >= 4 and content[:4] == b"Obj\x01"

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from typing import List
-from src.models.openmetadata.field.field import (
+from .field.field import (
     FieldAddedTypes,
     FieldUpdatedTypes,
     FieldDeletedTypes,

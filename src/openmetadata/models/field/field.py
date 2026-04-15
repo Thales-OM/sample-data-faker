@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Union, Optional, Annotated
 import re
-from src.models.openmetadata.field.value import ColumnValueRaw
+from .value import ColumnValueRaw
 from ._types import FieldNameRegex
 
 

@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional, Union, Literal, overload, Tuple
 from urllib.parse import urljoin
 import logging
 from src.config import OMDConfig
-from src.models import SampleData
 from src.logger import LoggerFactory
+from .models import SampleData
 
 
 class AsyncOMDClient:

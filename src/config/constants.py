@@ -6,7 +6,7 @@ from sdv.single_table.base import BaseSynthesizer
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer
 
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
 
 # Logging
 DEFAULT_LOG_LEVEL = "INFO"

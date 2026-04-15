@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, Base64Bytes
+from pydantic import BaseModel, Field
 from typing import Optional
 from src.config import DEFAULT_OUTPUT_SIZE
 from src.sources import SourceConfig
+from src.sources.avro_ocf import AvroBase64Str, AvroFilenameStr
 
 
 class SyntheticRequest(BaseModel):
@@ -18,10 +19,10 @@ class SyntheticRequest(BaseModel):
 
 
 class DTOAvroOCFRequest(BaseModel):
-    file_content: Base64Bytes = Field(
+    file_content: AvroBase64Str = Field(
         ..., description="Base64 encoded Avro OCF file content"
     )
-    filename: Optional[str] = Field(
+    filename: Optional[AvroFilenameStr] = Field(
         None,
         examples=["data.avro"],
         description="Original filename (e.g., 'data.avro')",

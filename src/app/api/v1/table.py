@@ -1,10 +1,10 @@
+import json
 import asyncio
 from fastapi import Depends, APIRouter, status
 from src.core import SyntheticDataWorker, DataFrameWrapper
-from src.models import SyntheticRequest, SyntheticResponse
 from src.config import Settings
+from ...models import SyntheticRequest, SyntheticResponse
 from ...deps import get_worker_queue, get_app_settings
-import json
 
 
 router = APIRouter(prefix="/table")
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/table")
     "/generate",
     response_model=SyntheticResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Generate synthetic dataset from custom source",
 )
 async def generate_synthetic(
     request: SyntheticRequest,

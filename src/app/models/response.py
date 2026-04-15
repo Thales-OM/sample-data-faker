@@ -18,11 +18,11 @@ class WebhookResponse(BaseModel):
 
 
 class ReadinessResponse(RootModel[str]):
-    root: str = "OK!"
+    root: str = "ok"
 
 
 class LivenessResponse(RootModel[str]):
-    root: str = "OK!"
+    root: str = "ok"
 
 
 class VersionResponse(BaseModel):

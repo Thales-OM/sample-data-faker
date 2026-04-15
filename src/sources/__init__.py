@@ -1,5 +1,5 @@
 from .base import DataSource
-from typing import Dict, Type, Union
+from typing import Dict, Type, Union, TypeVar
 import importlib
 import pkgutil
 import pathlib
@@ -7,11 +7,11 @@ from typing import Literal, get_type_hints, get_origin, get_args, Annotated
 import sys
 from pydantic import BaseModel, Field
 
-
+T = TypeVar("T", bound=DataSource)
 SOURCE_REGISTRY: Dict[str, Type[DataSource]] = {}
 
 
-def register_source(cls: Type[DataSource]):
+def register_source(cls: Type[T]) -> Type[T]:
     """Decorator to register a data source with its config schema."""
 
     TYPE_FIELD = "type"

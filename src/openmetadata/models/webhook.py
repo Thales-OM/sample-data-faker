@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from .change_description import ChangeDescription
 from ._types import AcceptableEntityType, AcceptableEventType
 from src.logger import LoggerFactory
@@ -38,7 +38,7 @@ class WebhookTableUpdated(BaseWebhookTable):
                 # At least one column was added/altered/deleted
                 if schema_changing_column:
                     return True
-            except Exception as ex:
+            except Exception:
                 failed_fields.append(field)
 
         if failed_fields:

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 import pandas as pd
 from typing import Any, Dict
-from src.models import SampleData
+from src.openmetadata import SampleData
 from src.logger import LoggerFactory
-from ..base import BaseDestination, BaseDestinationResponse
-from .client import AsyncOMDClient
+from src.openmetadata import AsyncOMDClient
+from .base import BaseDestination, BaseDestinationResponse
 
 
 logger = LoggerFactory.getLogger(__name__)
