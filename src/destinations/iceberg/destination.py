@@ -346,16 +346,12 @@ class IcebergDestination(BaseDestination):
     def _create_new_table(
         self,
         table_identifier: str,
-        arrow_table: pa.Table,
         iceberg_schema: Optional[Schema] = None,
     ) -> Table:
         """
         Creates a new Iceberg table with given schema or inferred from Arrow table.
         """
         try:
-            if not iceberg_schema:
-                iceberg_schema = pyarrow_to_schema(arrow_table.schema)
-
             table = self.catalog.create_table(
                 identifier=table_identifier,
                 schema=iceberg_schema,
