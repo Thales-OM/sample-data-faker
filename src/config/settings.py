@@ -1,7 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, SecretStr, HttpUrl, field_validator, AnyUrl
+from pydantic import Field, SecretStr, HttpUrl, field_validator
 from typing import Optional, Type, Literal
 from .secrets import DumpableSecretsBaseModel
+from .types import HiveMetastoreUri
 from .constants import (
     SDVSynthesizer,
     DEFAULT_LOG_LEVEL,
@@ -66,7 +67,7 @@ class S3SourceConfig(BaseS3Config):
 class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     catalog_name: str = Field(serialization_alias="name")
     type: Literal["hive"] = "hive"
-    uri: AnyUrl = Field(examples=["thrift://hms:9083"])
+    uri: HiveMetastoreUri = Field(examples=["thrift://hms:9083"])
     warehouse: str = Field(examples=["s3://my-bucket/warehouse/"])
     s3_access_key_id: str = Field(serialization_alias="s3.access-key-id")
     s3_secret_access_key: SecretStr = Field(
