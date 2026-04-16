@@ -20,7 +20,13 @@ class SyntheticRequest(BaseModel):
 
 class DTOAvroOCFRequest(BaseModel):
     file_content: AvroBase64Str = Field(
-        ..., description="Base64 encoded Avro OCF file content"
+        ...,
+        examples=[
+            "T2JqAQAEFGF2cm8uc2NoZW1hHnsidHlwZSI6InJlY29yZCIsIm5hbWUiOiJ0ZXN0Ii"
+            "wiZmllbGRzIjpbeyJuYW1lIjoiaWQiLCJ0eXBlIjoiaW50In1dfRQGYXZyby5jb2RlYw"
+            "ZzbmFwcHkAEPFGNVtbFhwriApCDQ4ODg4ODg4AAAEAMDAwMDAwMDAwMDAwMMA="
+        ],
+        description="Avro OCF file content as base64-encoded string (supports all codecs: snappy, deflate, null, etc.)",
     )
     filename: Optional[AvroFilenameStr] = Field(
         None,

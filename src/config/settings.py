@@ -8,6 +8,8 @@ from .constants import (
     BaseSynthesizer,
     SYNTHESIZER_MAP,
     APP_VERSION,
+    DEFAULT_MAX_WORKERS,
+    DEFAULT_MAX_PENDING,
 )
 
 
@@ -103,8 +105,8 @@ class Settings(BaseSettings):
     fastapi: FatAPISettings = FatAPISettings()
 
     # SDV & queue
-    max_workers: int = 2
-    max_pending: int = 3
+    max_workers: int = Field(DEFAULT_MAX_WORKERS, ge=1)
+    max_pending: int = Field(DEFAULT_MAX_PENDING, ge=1)
     sdv_model_type: SDVSynthesizer = SDVSynthesizer.GAUSSIAN_COPULA
     sdv_model_params: dict = {}
     cleanup_on_complete: bool = True

@@ -5,7 +5,7 @@ from src.config import Settings
 from src.destinations import S3Destination, FileFormat, IcebergDestination
 from src.core import SyntheticDataWorker, DataFrameWrapper
 from src.sources.avro_ocf import AvroOCFSourceConfig, AvroOCFSource
-from ...models import DTOAvroOCFRequest, AvroOCFResponse
+from ...models import DTOAvroOCFRequest, DTOAvroOCFResponse
 from ...deps import get_worker_queue, get_app_settings
 
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/dto")
 
 @router.post(
     "/avro-ocf",
-    response_model=AvroOCFResponse,
+    response_model=DTOAvroOCFResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_from_avro(
@@ -49,11 +49,15 @@ async def generate_from_avro(
         format=FileFormat.CSV,
     )
 
-    _ = await IcebergDestination(config=settings.hms_s3_destination).submit(
+    iceberg_response = await IcebergDestination(
+        config=settings.hms_s3_destination
+    ).submit(
         df=synthetic_df_wrap.df_clean,
         namespace=avro_ocf_source.namespace,
         title=avro_ocf_source.title,
         avro_schema=avro_ocf_source.avro_schema,
     )
 
-    return AvroOCFResponse(message="ok", s3_path=s3_response.s3_key)
+    return DTOAvroOCFResponse(
+        message="ok", s3_file_upload=s3_response, iceberg_upload=iceberg_response
+    )

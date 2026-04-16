@@ -5,7 +5,7 @@ from .response import (
     ReadinessResponse,
     LivenessResponse,
     WebhookResponse,
-    AvroOCFResponse,
+    DTOAvroOCFResponse,
     VersionResponse,
 )
 
@@ -18,6 +18,6 @@ __all__ = [
     "ReadinessResponse",
     "LivenessResponse",
     "WebhookResponse",
-    "AvroOCFResponse",
+    "DTOAvroOCFResponse",
     "VersionResponse",
 ]

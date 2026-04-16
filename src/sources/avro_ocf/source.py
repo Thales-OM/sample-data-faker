@@ -17,10 +17,18 @@ logger = LoggerFactory.getLogger(__name__)
 
 class AvroOCFSourceConfig(DataSourceConfig):
     file_content: AvroBase64Str = Field(
-        ..., description="Avro OCF file content as base64-encoded string"
+        ...,
+        examples=[
+            "T2JqAQAEFGF2cm8uc2NoZW1hHnsidHlwZSI6InJlY29yZCIsIm5hbWUiOiJ0ZXN0Ii"
+            "wiZmllbGRzIjpbeyJuYW1lIjoiaWQiLCJ0eXBlIjoiaW50In1dfRQGYXZyby5jb2RlYw"
+            "ZzbmFwcHkAEPFGNVtbFhwriApCDQ4ODg4ODg4AAAEAMDAwMDAwMDAwMDAwMMA="
+        ],
+        description="Avro OCF file content as base64-encoded string (supports all codecs: snappy, deflate, null, etc.)",
     )
     filename: Optional[AvroFilenameStr] = Field(
-        None, description="Original filename for extension validation"
+        None,
+        examples=["data.avro"],
+        description="Original filename for extension validation",
     )
 
 

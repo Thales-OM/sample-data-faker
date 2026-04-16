@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from pydantic import RootModel, BaseModel
+from src.destinations import S3DestinationResponse, IcebergDestinationResponse
 
 
 class SyntheticResponse(RootModel[List[Dict[str, Any]]]):
@@ -29,6 +30,15 @@ class VersionResponse(BaseModel):
     version: str = "unknown"
 
 
-class AvroOCFResponse(BaseModel):
+class DTOS3FileUpload(BaseModel, S3DestinationResponse):
+    pass
+
+
+class DTOIcebergUpload(BaseModel, IcebergDestinationResponse):
+    pass
+
+
+class DTOAvroOCFResponse(BaseModel):
     message: str = "ok"
-    s3_path: str
+    s3_file_upload: DTOS3FileUpload
+    iceberg_upload: DTOIcebergUpload
