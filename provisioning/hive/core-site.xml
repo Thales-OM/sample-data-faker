@@ -19,12 +19,18 @@
 
     <property>
         <name>fs.defaultFS</name>
-        <value>hdfs://hive-metastore:8020</value>
+        <value>s3a://dto-synthetic</value>
     </property>
 
     <property>
         <name>fs.default.name</name>
-        <value>hdfs://hive-metastore:9000</value>
+        <value>s3a://dto-synthetic</value>
+    </property>
+
+    <!-- Hive warehouse directory -->
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>s3a://dto-synthetic/warehouse/</value>
     </property>
 
     <!-- OOZIE proxy user setting -->
@@ -128,6 +134,11 @@
     <property>
         <name>fs.s3a.impl</name>
         <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+    </property>
+
+    <property>
+        <name>fs.s3a.buffer.dir</name>
+        <value>/tmp/s3a</value>
     </property>
 
 </configuration>
