@@ -61,7 +61,7 @@ class S3DestinationConfig(BaseS3Config):
 
 
 class S3SourceConfig(BaseS3Config):
-    key: str = Field(None, description="Path to read the file from")
+    key: str = Field(description="Path to read the file from")
 
 
 class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
@@ -78,6 +78,13 @@ class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
         serialization_alias="write.format.default",
     )
     s3_region: str = Field("us-east-1", serialization_alias="s3.region")
+    s3_endpoint: str = Field(
+        serialization_alias="s3.endpoint",
+        description="S3 endpoint URL (optional, for MinIO etc.)",
+    )
+    py_io_impl: str = Field(
+        "pyiceberg.io.pyarrow.PyArrowFileIO", serialization_alias="py-io-impl"
+    )
 
     model_config = SettingsConfigDict(populate_by_name=True)
 
