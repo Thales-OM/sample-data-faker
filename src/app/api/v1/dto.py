@@ -54,7 +54,7 @@ async def generate_from_avro(
     ).submit(
         df=synthetic_df_wrap.df_clean,
         namespace=avro_ocf_source.namespace,
-        title=avro_ocf_source.title,
+        table_name=avro_ocf_source.title,
         avro_schema=avro_ocf_source.avro_schema,
     )
 

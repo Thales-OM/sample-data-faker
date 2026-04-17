@@ -6,7 +6,11 @@ import pyarrow as pa
 from pyiceberg.io.pyarrow import pyarrow_to_schema
 from pyiceberg.catalog import Catalog, load_catalog
 from pyiceberg.table import Table
-from pyiceberg.exceptions import NoSuchTableError, CommitFailedException
+from pyiceberg.exceptions import (
+    NoSuchTableError,
+    CommitFailedException,
+    NamespaceAlreadyExistsError,
+)
 from pyiceberg.schema import Schema
 from pyiceberg.utils.schema_conversion import AvroSchemaConversion
 from src.config import HMSS3DestinationConfig
@@ -98,39 +102,15 @@ class IcebergDestination(BaseDestination):
 
     def _build_table_identifier(
         self,
-        namespace: Optional[str] = None,
-        title: Optional[str] = None,
-        table_identifier: Optional[str] = None,
+        table_name: str,
+        namespace: str,
     ) -> str:
-        """
-        Build table identifier from namespace/title or use provided identifier.
-
-        Args:
-            namespace: Optional namespace (e.g., "ecommerce")
-            title: Optional table title (e.g., "users")
-            table_identifier: Direct table identifier (e.g., "ecommerce.users")
-
-        Returns:
-            Table identifier in format "namespace.title"
-        """
-        if table_identifier:
-            return table_identifier
-
-        if namespace and title:
-            return f"{namespace}.{title}"
-
-        if title:
-            return title
-
-        raise ValueError(
-            "Either (namespace, title) or table_identifier must be provided"
-        )
+        return f"{namespace}.{table_name}"
 
     def _get_s3_location(
         self,
-        namespace: Optional[str] = None,
-        title: Optional[str] = None,
-        table_identifier: Optional[str] = None,
+        table_name: str,
+        namespace: str,
     ) -> str:
         """
         Construct the S3 location where Iceberg table data is stored.
@@ -138,19 +118,6 @@ class IcebergDestination(BaseDestination):
         Returns:
             Human-readable S3 path for documentation/logging
         """
-        # Parse namespace and title from table_identifier if needed
-        if not namespace or not title:
-            if table_identifier and "." in table_identifier:
-                parts = table_identifier.split(".")
-                namespace = parts[0]
-                title = parts[1]
-            elif table_identifier:
-                namespace = "default"
-                title = table_identifier
-            else:
-                namespace = namespace or "default"
-                title = title or "unknown"
-
         # Extract bucket and warehouse from config
         warehouse_url = self.config.warehouse  # e.g., "s3://my-bucket/iceberg-tables/"
         if warehouse_url.startswith("s3://"):
@@ -168,15 +135,14 @@ class IcebergDestination(BaseDestination):
             return f"Unknown (invalid warehouse URL: {warehouse_url})"
 
         # Construct readable path
-        s3_location = f"s3://{bucket}/{warehouse_path}{namespace}.db/{title}/"
+        s3_location = f"s3://{bucket}/{warehouse_path}{namespace}.db/{table_name}/"
         return s3_location
 
     async def submit(
         self,
         df: pd.DataFrame,
-        namespace: Optional[str] = None,
-        title: Optional[str] = None,
-        table_identifier: Optional[str] = None,
+        table_name: str,
+        namespace: str = "default",
         avro_schema: Optional[Dict[str, Any]] = None,
         iceberg_schema: Optional[Union[Schema, Dict[str, Any]]] = None,
     ) -> IcebergDestinationResponse:
@@ -185,10 +151,8 @@ class IcebergDestination(BaseDestination):
 
         Args:
             df: DataFrame with data to write
-            namespace: Optional namespace for table (e.g., "ecommerce")
-            title: Optional table name (e.g., "users")
-            table_identifier: Direct table identifier (e.g., "ecommerce.users")
-                              Takes precedence over namespace/title if provided
+            namespace: Optional namespace for table (default: "default")
+            table_name: Table name (e.g., "users")
             avro_schema: Optional Avro schema for schema reconciliation
             iceberg_schema: Optional Iceberg schema for schema reconciliation
 
@@ -196,21 +160,15 @@ class IcebergDestination(BaseDestination):
             IcebergDestinationResponse with metadata about the write operation
 
         Examples:
-            # Using namespace/title (matches S3Destination pattern)
             await dest.submit(df, namespace="ecommerce", title="users")
-
-            # Using direct identifier
-            await dest.submit(df, table_identifier="ecommerce.users")
         """
         # Build table identifier
         resolved_table_id = self._build_table_identifier(
-            namespace=namespace, title=title, table_identifier=table_identifier
+            table_name=table_name, namespace=namespace
         )
 
         # Get S3 location for response
-        s3_location = self._get_s3_location(
-            namespace=namespace, title=title, table_identifier=table_identifier
-        )
+        s3_location = self._get_s3_location(table_name=table_name, namespace=namespace)
 
         try:
             # Offload blocking I/O to a thread
@@ -272,6 +230,12 @@ class IcebergDestination(BaseDestination):
             if not iceberg_schema:
                 iceberg_schema = pyarrow_to_schema(arrow_table.schema)
 
+            namespace = table_identifier.split(".")[0]
+            try:
+                self.catalog.create_namespace(namespace=namespace)
+            except NamespaceAlreadyExistsError:
+                pass
+
             # Check if table exists
             created_new_table = False
             try:
@@ -290,10 +254,13 @@ class IcebergDestination(BaseDestination):
             # Write data in a single transaction (atomic: schema + data)
             try:
                 with table.transaction() as txn:
-                    if not created_new_table and iceberg_schema:
+                    if not created_new_table:
                         # Update schema within the same transaction as data write
                         # This ensures atomicity: both succeed or both fail
-                        txn.update_schema().union_by_name(new_schema=iceberg_schema)
+                        # Also, .update_schema() skips metadata update if schemas are identical
+                        txn.update_schema(
+                            allow_incompatible_changes=False, case_sensitive=True
+                        ).union_by_name(new_schema=iceberg_schema)
 
                     # Append for new tables, overwrite for existing
                     if created_new_table:
@@ -352,12 +319,17 @@ class IcebergDestination(BaseDestination):
         Creates a new Iceberg table with given schema or inferred from Arrow table.
         """
         try:
-            table = self.catalog.create_table(
-                identifier=table_identifier,
-                schema=iceberg_schema,
-                partition_spec=self.partition_spec,
-                properties=self.write_properties,
-            )
+            # If given None for partition_spec .create_table() raises an error
+            create_kwargs: dict = {
+                "identifier": table_identifier,
+                "schema": iceberg_schema,
+            }
+            if self.partition_spec is not None:
+                create_kwargs["partition_spec"] = self.partition_spec
+            if self.write_properties is not None:
+                create_kwargs["properties"] = self.write_properties
+
+            table = self.catalog.create_table(**create_kwargs)
             logger.info(f"Created new table: {table_identifier}")
             return table
         except Exception as e:
