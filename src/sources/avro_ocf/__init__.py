@@ -1,5 +1,7 @@
 from .source import AvroOCFSourceConfig, AvroOCFSource
 from .types import Base64Str, AvroBase64Str, AvroFilenameStr
+from .helpers import AvroSchemaFieldIdAssigner, CustomAvroToArrowConverter
+
 
 __all__ = [
     "AvroOCFSourceConfig",
@@ -7,4 +9,6 @@ __all__ = [
     "Base64Str",
     "AvroBase64Str",
     "AvroFilenameStr",
+    "AvroSchemaFieldIdAssigner",
+    "CustomAvroToArrowConverter",
 ]
