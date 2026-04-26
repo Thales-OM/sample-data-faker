@@ -4,6 +4,7 @@ Unit tests for DataFrameFlattener array handling functionality.
 
 import pytest
 import pandas as pd
+import pyarrow as pa
 import numpy as np
 
 from src.core.flatten import DataFrameFlattener, SchemaNode, NodeType
@@ -379,3 +380,345 @@ class TestSchemaNode:
         assert restored.children["scores"].node_type == NodeType.ARRAY
         assert restored.children["scores"].max_elements == 3
         assert restored.children["name"].dtype == "object"
+
+
+@pytest.mark.unit
+class TestPyArrowSupport:
+    """Tests for PyArrow Table support."""
+
+    def test_flatten_struct_column(self):
+        """Test that struct columns are flattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array(
+                    [
+                        {"name": "Alice", "age": 30},
+                        {"name": "Bob", "age": 25},
+                    ]
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+
+        assert "id" in flat_table.column_names
+        assert "user.name" in flat_table.column_names
+        assert "user.age" in flat_table.column_names
+        assert flat_table["user.name"].to_pylist() == ["Alice", "Bob"]
+        assert flat_table["user.age"].to_pylist() == [30, 25]
+
+    def test_flatten_nested_struct(self):
+        """Test that nested struct columns are flattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "profile": pa.array(
+                    [
+                        {
+                            "name": "Alice",
+                            "address": {"city": "NYC", "zip": "10001"},
+                        },
+                        {
+                            "name": "Bob",
+                            "address": {"city": "LA", "zip": "90001"},
+                        },
+                    ]
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+
+        assert "id" in flat_table.column_names
+        assert "profile.name" in flat_table.column_names
+        assert "profile.address.city" in flat_table.column_names
+        assert "profile.address.zip" in flat_table.column_names
+        assert flat_table["profile.name"].to_pylist() == ["Alice", "Bob"]
+        assert flat_table["profile.address.city"].to_pylist() == ["NYC", "LA"]
+
+    def test_unflatten_struct_column(self):
+        """Test that struct columns are unflattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array(
+                    [
+                        {"name": "Alice", "age": 30},
+                        {"name": "Bob", "age": 25},
+                    ]
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        assert "user" in unflat_table.column_names
+        user_values = unflat_table["user"].to_pylist()
+        assert user_values[0] == {"name": "Alice", "age": 30}
+        assert user_values[1] == {"name": "Bob", "age": 25}
+
+    def test_unflatten_nested_struct(self):
+        """Test that nested struct columns are unflattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "profile": pa.array(
+                    [
+                        {
+                            "name": "Alice",
+                            "address": {"city": "NYC", "zip": "10001"},
+                        },
+                        {
+                            "name": "Bob",
+                            "address": {"city": "LA", "zip": "90001"},
+                        },
+                    ]
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        assert "profile" in unflat_table.column_names
+        profile_values = unflat_table["profile"].to_pylist()
+        assert profile_values[0]["name"] == "Alice"
+        assert profile_values[0]["address"]["city"] == "NYC"
+        assert profile_values[1]["name"] == "Bob"
+        assert profile_values[1]["address"]["zip"] == "90001"
+
+    def test_roundtrip_struct_with_nulls(self):
+        """Test struct with null values roundtrip."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array([{"name": "Alice", "age": 30}, None]),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        user_values = unflat_table["user"].to_pylist()
+        assert user_values[0] == {"name": "Alice", "age": 30}
+
+    def test_flatten_list_of_structs(self):
+        """Test that array of structs is flattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1],
+                "items": pa.array(
+                    [[{"product": "A", "qty": 1}, {"product": "B", "qty": 2}]]
+                )
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+
+        assert "id" in flat_table.column_names
+        assert "items[0]" in flat_table.column_names
+        assert "items[1]" in flat_table.column_names
+        items_0_struct = flat_table["items[0]"].to_pylist()
+        assert items_0_struct[0]["product"] == "A"
+        assert items_0_struct[0]["qty"] == 1
+
+    def test_unflatten_list_of_structs(self):
+        """Test that array of structs is unflattened correctly."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1],
+                "items": pa.array(
+                    [[{"product": "A", "qty": 1}, {"product": "B", "qty": 2}]]
+                )
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        items_values = unflat_table["items"].to_pylist()
+        assert items_values[0][0] == {"product": "A", "qty": 1}
+        assert items_values[0][1] == {"product": "B", "qty": 2}
+
+    def test_scalar_column_roundtrip(self):
+        """Test that scalar columns work with PyArrow."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2, 3],
+                "name": ["Alice", "Bob", "Charlie"],
+                "value": [10.5, 20.5, 30.5],
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        assert unflat_table["id"].to_pylist() == [1, 2, 3]
+        assert unflat_table["name"].to_pylist() == ["Alice", "Bob", "Charlie"]
+        assert unflat_table["value"].to_pylist() == [10.5, 20.5, 30.5]
+
+    def test_schema_from_pyarrow_table(self):
+        """Test that schema is correctly built from PyArrow table."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array(
+                    [
+                        {"name": "Alice", "scores": [90, 85]},
+                        {"name": "Bob", "scores": [75]},
+                    ]
+                ),
+            }
+        )
+
+        flattener.flatten(table)
+
+        assert "id" in flattener.schema
+        assert "user" in flattener.schema
+        assert flattener.schema["id"].root_node.node_type == NodeType.SCALAR
+        assert flattener.schema["user"].root_node.node_type == NodeType.DICT
+        assert "name" in flattener.schema["user"].root_node.children
+        assert "scores" in flattener.schema["user"].root_node.children
+        assert flattener.schema["user"].root_node.children["scores"].node_type == NodeType.ARRAY
+
+    def test_schema_serialization_with_pyarrow(self):
+        """Test schema serialization works after PyArrow flatten."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array(
+                    [
+                        {"name": "Alice", "age": 30},
+                        {"name": "Bob", "age": 25},
+                    ]
+                ),
+            }
+        )
+
+        flattener.flatten(table)
+        schema_dict = flattener.schema_to_dict()
+
+        assert "columns" in schema_dict
+        assert "user" in schema_dict["columns"]
+        assert schema_dict["columns"]["user"]["root_node"]["node_type"] == "dict"
+        assert "name" in schema_dict["columns"]["user"]["root_node"]["children"]
+        assert "age" in schema_dict["columns"]["user"]["root_node"]["children"]
+
+    def test_load_schema_and_unflatten(self):
+        """Test loading schema and unflattening with new data."""
+        flattener1 = DataFrameFlattener()
+        table1 = pa.table(
+            {
+                "id": [1, 2],
+                "user": pa.array(
+                    [
+                        {"name": "Alice", "age": 30},
+                        {"name": "Bob", "age": 25},
+                    ]
+                ),
+            }
+        )
+        flattener1.flatten(table1)
+        schema_dict = flattener1.schema_to_dict()
+
+        flat_data = {
+            "id": [3, 4],
+            "user.name": ["Charlie", "David"],
+            "user.age": [35, 40],
+        }
+        flat_table = pa.table(flat_data)
+
+        flattener2 = DataFrameFlattener()
+        flattener2.load_schema_from_dict(schema_dict)
+        unflat_table = flattener2.unflatten(flat_table)
+
+        user_values = unflat_table["user"].to_pylist()
+        assert user_values[0] == {"name": "Charlie", "age": 35}
+        assert user_values[1] == {"name": "David", "age": 40}
+
+    def test_timestamp_column_handling(self):
+        """Test that timestamp columns are handled correctly in flatten/unflatten."""
+        flattener = DataFrameFlattener()
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "event_time": pa.array(
+                    [
+                        {"seconds": 1234567890, "nanos": 0},
+                        {"seconds": 987654321, "nanos": 123456789},
+                    ],
+                    type=pa.struct([("seconds", pa.int64()), ("nanos", pa.int64())]),
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        unflat_table = flattener.unflatten(flat_table)
+
+        assert "event_time.seconds" in flat_table.column_names
+        assert "event_time.nanos" in flat_table.column_names
+
+    def test_out_of_range_timestamps_in_struct(self):
+        """Test that out-of-range timestamps in nested structs are handled."""
+        import datetime
+        flattener = DataFrameFlattener()
+        
+        old_timestamp = datetime.datetime(1800, 1, 1, 0, 0, 0)
+        future_timestamp = datetime.datetime(2500, 12, 31, 23, 59, 59)
+        
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "event": pa.array(
+                    [
+                        {"ts": old_timestamp, "name": "old_event"},
+                        {"ts": future_timestamp, "name": "future_event"},
+                    ]
+                ),
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        
+        assert "id" in flat_table.column_names
+        assert "event.ts" in flat_table.column_names
+        assert "event.name" in flat_table.column_names
+
+    def test_list_of_timestamps(self):
+        """Test that arrays of timestamps are handled correctly."""
+        import datetime
+        flattener = DataFrameFlattener()
+        
+        ts1 = datetime.datetime(2020, 1, 1, 12, 0, 0)
+        ts2 = datetime.datetime(2021, 6, 15, 18, 30, 0)
+        ts3 = datetime.datetime(2022, 12, 25, 9, 0, 0)
+        
+        table = pa.table(
+            {
+                "id": [1, 2],
+                "timestamps": pa.array(
+                    [[ts1, ts2, ts3], [ts2, ts3]]
+                )
+            }
+        )
+
+        flat_table = flattener.flatten(table)
+        
+        assert "id" in flat_table.column_names
+        assert "timestamps[0]" in flat_table.column_names
+        assert "timestamps[1]" in flat_table.column_names
+        assert "timestamps[2]" in flat_table.column_names
+
+

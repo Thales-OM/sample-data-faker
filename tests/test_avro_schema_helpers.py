@@ -5,7 +5,7 @@ Unit tests for avro_schema_helpers module.
 import pytest
 from unittest.mock import MagicMock
 
-from src.destinations.iceberg.helpers import AvroSchemaFieldIdAssigner
+from src.sources.avro_ocf import AvroSchemaFieldIdAssigner
 
 
 @pytest.mark.unit
