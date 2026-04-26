@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
+import pyarrow as pa
+import pyarrow.compute as pc
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, overload
 
 
 class NodeType(Enum):
@@ -75,6 +77,7 @@ class DataFrameFlattener:
     def __init__(self):
         self._schema: Dict[str, ColumnSchema] = {}
         self._original_columns: List[str] = []
+        self._input_is_pyarrow: bool = False
 
     @property
     def schema(self) -> Dict[str, ColumnSchema]:
@@ -93,7 +96,62 @@ class DataFrameFlattener:
         }
         self._original_columns = data["original_columns"]
 
-    def flatten(self, df: pd.DataFrame) -> pd.DataFrame:
+    @overload
+    def flatten(self, data: pa.Table) -> pa.Table: ...
+
+    @overload
+    def flatten(self, data: pd.DataFrame) -> pd.DataFrame: ...
+
+    def flatten(self, data):
+        if isinstance(data, pa.Table):
+            return self._flatten_pyarrow(data)
+        return self._flatten_pandas(data)
+
+    @overload
+    def unflatten(self, flat_data: pa.Table) -> pa.Table: ...
+
+    @overload
+    def unflatten(self, flat_data: pd.DataFrame) -> pd.DataFrame: ...
+
+    def unflatten(self, flat_data):
+        if isinstance(flat_data, pa.Table):
+            return self._unflatten_pyarrow(flat_data)
+        return self._unflatten_pandas(flat_data)
+
+    def _to_pandas(self, data: Union[pd.DataFrame, pa.Table]) -> pd.DataFrame:
+        if isinstance(data, pa.Table):
+            return data.to_pandas()
+        return data
+
+    def _from_pandas(
+        self, df: pd.DataFrame
+    ) -> Union[pd.DataFrame, pa.Table]:
+        if self._input_is_pyarrow:
+            return pa.Table.from_pandas(df)
+        return df
+
+    def _flatten_pyarrow(self, table: pa.Table) -> pa.Table:
+        if table.num_rows == 0:
+            self._schema = {}
+            self._original_columns = table.column_names
+            return table
+
+        self._original_columns = table.column_names
+        self._schema = {}
+        flat_columns = {}
+
+        for col_name in table.column_names:
+            col = table.column(col_name)
+            col_schema = self._build_column_schema_from_arrow(col)
+            self._schema[col_name] = col_schema
+            flat_col_data = self._flatten_column_arrow(col, col_schema.root_node, [col_name])
+            flat_columns.update(flat_col_data)
+
+        self._input_is_pyarrow = True
+        return pa.Table.from_pydict(flat_columns)
+
+    def _flatten_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._input_is_pyarrow = False
         if df.empty:
             self._schema = {}
             self._original_columns = df.columns.tolist()
@@ -112,7 +170,26 @@ class DataFrameFlattener:
 
         return pd.DataFrame(flat_data, index=df.index)
 
-    def unflatten(self, flat_df: pd.DataFrame) -> pd.DataFrame:
+    def _unflatten_pyarrow(self, flat_table: pa.Table) -> pa.Table:
+        if not self._schema:
+            raise ValueError(
+                "Call flatten() first or load schema via load_schema_from_dict()"
+            )
+        if flat_table.num_rows == 0:
+            return pa.Table.from_pydict({col: [] for col in self._original_columns})
+
+        result = {}
+        for col_name, col_schema in self._schema.items():
+            if col_schema.root_node.node_type == NodeType.SCALAR:
+                result[col_name] = flat_table.column(col_name)
+            else:
+                result[col_name] = self._unflatten_column_arrow(flat_table, col_schema)
+
+        self._input_is_pyarrow = True
+        return pa.Table.from_pydict(result)
+
+    def _unflatten_pandas(self, flat_df: pd.DataFrame) -> pd.DataFrame:
+        self._input_is_pyarrow = False
         if not self._schema:
             raise ValueError(
                 "Call flatten() first or load schema via load_schema_from_dict()"
@@ -146,6 +223,138 @@ class DataFrameFlattener:
 
         root_node = self._infer_schema_from_values(values)
         return ColumnSchema(name=col_name, root_node=root_node)
+
+    def _build_column_schema_from_arrow(self, col: pa.ChunkedArray) -> ColumnSchema:
+        col_type = col.type
+        non_null = col.filter(pc.not_equal(col, None)).to_pylist()
+        non_null = [v for v in non_null if v is not None]
+
+        if not non_null:
+            return ColumnSchema(
+                name=col.name,
+                root_node=SchemaNode(
+                    node_type=NodeType.SCALAR, dtype=str(col_type)
+                ),
+            )
+
+        root_node = self._infer_schema_from_values_arrow(non_null, col_type)
+        return ColumnSchema(name=col.name, root_node=root_node)
+
+    def _infer_schema_from_values_arrow(
+        self, values: List[Any], pa_type: pa.DataType
+    ) -> SchemaNode:
+        if pa.types.is_list(pa_type):
+            element_type = pa_type.value_type
+            max_len = 0
+            has_nulls = False
+            element_values = []
+
+            for v in values:
+                if v is None:
+                    has_nulls = True
+                    continue
+                max_len = max(max_len, len(v))
+                for item in v:
+                    if item is None:
+                        has_nulls = True
+                    else:
+                        element_values.append(item)
+
+            if not element_values:
+                element_schema = SchemaNode(node_type=NodeType.SCALAR, dtype="object")
+            else:
+                element_schema = self._infer_schema_from_values_arrow(
+                    element_values, element_type
+                )
+
+            return SchemaNode(
+                node_type=NodeType.ARRAY,
+                element_schema=element_schema,
+                nullable_elements=has_nulls,
+                nullable_array=False,
+                max_elements=max_len,
+            )
+        else:
+            dtype = self._pa_type_to_dtype(pa_type)
+            return SchemaNode(node_type=NodeType.SCALAR, dtype=dtype)
+
+    def _pa_type_to_dtype(self, pa_type: pa.DataType) -> str:
+        if pa.types.is_integer(pa_type):
+            return "int64"
+        elif pa.types.is_floating(pa_type):
+            return "float64"
+        elif pa.types.is_boolean(pa_type):
+            return "bool"
+        elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
+            return "object"
+        else:
+            return "object"
+
+    def _flatten_column_arrow(
+        self, col: pa.ChunkedArray, schema_node: SchemaNode, path: List[str]
+    ) -> Dict[str, List[Any]]:
+        result = {}
+        col_name = ".".join(path)
+
+        if schema_node.node_type == NodeType.SCALAR:
+            result[col_name] = col.to_pylist()
+
+        elif schema_node.node_type == NodeType.ARRAY:
+            max_elements = schema_node.max_elements
+            py_list = col.to_pylist()
+
+            if schema_node.nullable_array:
+                result[f"{col_name}._is_null"] = [
+                    v is None for v in py_list
+                ]
+
+            for i in range(max_elements):
+                element_values = []
+                for v in py_list:
+                    if v is None:
+                        element_values.append(None)
+                    elif isinstance(v, list):
+                        if i < len(v):
+                            element_values.append(v[i])
+                        else:
+                            element_values.append(None)
+                    else:
+                        element_values.append(None)
+                result[f"{col_name}[{i}]"] = element_values
+
+        return result
+
+    def _unflatten_column_arrow(
+        self, flat_table: pa.Table, col_schema: ColumnSchema
+    ) -> pa.Array:
+        schema_node = col_schema.root_node
+        col_name = col_schema.name
+
+        if schema_node.node_type == NodeType.SCALAR:
+            return flat_table.column(col_name)
+
+        elif schema_node.node_type == NodeType.ARRAY:
+            max_elements = schema_node.max_elements
+            result_lists: List[List[Any]] = [[] for _ in range(max_elements)]
+
+            flat_col = flat_table.column(col_name)
+            py_list = flat_col.to_pylist()
+
+            for i in range(max_elements):
+                for v in py_list:
+                    if v is None:
+                        result_lists[i].append(None)
+                    elif isinstance(v, list):
+                        if i < len(v):
+                            result_lists[i].append(v[i])
+                        else:
+                            result_lists[i].append(None)
+                    else:
+                        result_lists[i].append(None)
+
+            return pa.chunked_array([result_lists[i] for i in range(max_elements)])
+
+        return flat_table.column(col_name)
 
     def _infer_schema_from_values(self, values: List[Any]) -> SchemaNode:
         sample = None
