@@ -1,17 +1,17 @@
 import sys
+import pandas as pd
+import pyarrow as pa
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Optional, Type
+from typing import Optional, Type, Dict, Any, Union
 import torch
-from sdv.metadata import SingleTableMetadata
-from sdv.single_table.base import BaseSynthesizer
+from sdv.single_table.base import BaseSingleTableSynthesizer
 from sdv.single_table import CTGANSynthesizer
 from src.logger import LoggerFactory
 from src.sources import DataSource
-from .flatten import DataFrameFlattener
-from .dataframe_wrapper import DataFrameWrapper
 from .exceptions import WorkerCapacityError, GenerationError
 from .singleton import Singleton
+from .sdv_pipeline import SDVPipeline
 
 
 logger = LoggerFactory.getLogger(__name__)
@@ -20,6 +20,7 @@ logger = LoggerFactory.getLogger(__name__)
 class SyntheticDataWorker(Singleton):
     """
     A single entrypoint class to schedule, limit and submit synthetic data generation workloads.
+    Controls resource allocation (cuda), concurrency limiting and execution flow.
     """
 
     def __init__(self, max_workers: int, max_pending: int = 10):
@@ -42,12 +43,13 @@ class SyntheticDataWorker(Singleton):
         self,
         source: DataSource,
         output_size: int,
-        synthesizer_cls: Type[BaseSynthesizer],
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
         load_limit: Optional[int] = None,
-        model_params: Optional[dict] = None,
+        model_params: Optional[Dict[str, Any]] = None,
     ) -> Future:
         """
-        Submit a generation task. Returns a Future that resolves to DataFrameWrapper.
+        Submit a generation task. Returns a Future,
+        that resolves to Union[pa.Table, pd.DataFrame] based on source.
 
         Blocks (with timeout) if pending tasks exceed max_pending.
         """
@@ -72,9 +74,9 @@ class SyntheticDataWorker(Singleton):
             self._generate_with_cleanup,
             source=source,
             output_size=output_size,
-            load_limit=load_limit,
-            model_params=model_params or {},
             synthesizer_cls=synthesizer_cls,
+            load_limit=load_limit,
+            model_params=model_params or dict(),
         )
 
         # Callback to release slot when done
@@ -89,7 +91,7 @@ class SyntheticDataWorker(Singleton):
         future.add_done_callback(_on_complete)
         return future
 
-    def _generate_with_cleanup(self, **kwargs) -> DataFrameWrapper:
+    def _generate_with_cleanup(self, **kwargs) -> Union[pa.Table, pd.DataFrame]:
         """Wrapper with error handling and cleanup"""
         try:
             return self._generate_synthetic_data(**kwargs)
@@ -98,42 +100,39 @@ class SyntheticDataWorker(Singleton):
             raise GenerationError(
                 f"Synthetic generation failed: {str(e)}", cause=e
             ) from e
+        finally:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def _generate_synthetic_data(
         self,
         source: DataSource,
         output_size: int,
-        synthesizer_cls: Type[BaseSynthesizer],
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
         load_limit: Optional[int],
-        model_params: dict,
-    ) -> DataFrameWrapper:
-        df = source.load_dataframe(limit=load_limit)
-        logger.info(f"Loaded {len(df)} rows from {source.type}")
+        model_params: Dict[str, Any],
+    ) -> Union[pa.Table, pd.DataFrame]:
+        data = source.load_dataframe(limit=load_limit)
+        num_rows = len(data)
 
-        if df.empty:
+        logger.info(f"Loaded {num_rows} rows from {source.type}")
+
+        if num_rows <= 0:
             raise GenerationError("No valid records loaded from source")
-
-        flattener = DataFrameFlattener()
-        df_flat = flattener.flatten(df)
-
-        metadata = SingleTableMetadata()
-        metadata.detect_from_dataframe(df_flat)
 
         params = model_params.copy()
 
         if synthesizer_cls is CTGANSynthesizer:
             params["cuda"] = torch.cuda.is_available()
 
-        synthesizer = synthesizer_cls(metadata=metadata, **params)
-        synthesizer.fit(df_flat)
-        synthetic_flat = synthesizer.sample(num_rows=output_size)
-        synthetic_df = flattener.unflatten(synthetic_flat)
+        synth_data, _, _ = SDVPipeline.run_pipeline(
+            synthesizer_cls=synthesizer_cls,
+            data=data,
+            model_params=model_params,
+            num_rows=output_size,
+        )
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        del synthesizer
-
-        return DataFrameWrapper(df=synthetic_df)
+        return synth_data
 
     @property
     def pending_count(self) -> int:
@@ -153,7 +152,7 @@ class SyntheticDataWorker(Singleton):
         with self._lock:
             return self._pending_count >= self.max_pending
 
-    def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
+    def shutdown(self, wait: bool = True):
         """Shutdown worker and release resources"""
         logger.info(f"Shutting down worker (pending={self.pending_count})")
 
