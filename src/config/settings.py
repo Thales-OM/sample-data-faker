@@ -43,7 +43,7 @@ class OMDConfig(BaseSettings):
         return HttpUrl(str(v).rstrip("/"))
 
 
-class BaseS3Config(BaseSettings):
+class S3DestinationConfig(BaseSettings):
     endpoint: Optional[HttpUrl] = Field(
         None, description="Custom S3 endpoint (for minio, etc.)"
     )
@@ -51,17 +51,6 @@ class BaseS3Config(BaseSettings):
     secret_key: SecretStr = Field(exclude=True)
     region: str = Field("us-east-1", description="AWS region (e.g., us-east-1)")
     bucket: str
-
-
-class S3DestinationConfig(BaseS3Config):
-    key: Optional[str] = Field(
-        None,
-        description="Path to save the file to. When left blank - constructed automatically",
-    )
-
-
-class S3SourceConfig(BaseS3Config):
-    key: str = Field(description="Path to read the file from")
 
 
 class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
@@ -101,7 +90,6 @@ class FatAPISettings(BaseSettings):
 
 class Settings(BaseSettings):
     # Default source configs
-    s3_source: Optional[S3SourceConfig] = None
     trino_source: Optional[TrinoConnectionConfig] = None
 
     # Default publish destinations
