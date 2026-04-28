@@ -4,10 +4,11 @@ import base64
 from pydantic import Field, PrivateAttr
 from fastapi import HTTPException, status
 import fastavro
-import pandas as pd
+import pyarrow as pa
 from src.logger import LoggerFactory
 from src.config import DEFAULT_AVRO_NAMESPACE
 from .types import AvroBase64Str, AvroFilenameStr
+from .helpers import AvroToArrowConverter
 from ..base import DataSource, DataSourceConfig
 from .. import register_source
 
@@ -67,7 +68,7 @@ class AvroOCFSource(DataSource):
             )
         return self._avro_schema
 
-    def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:
+    def load_dataframe(self, limit: int | None = None) -> pa.Table:
         file_stream = BytesIO(base64.b64decode(self.config.file_content))
 
         # Parse Avro OCF - fastavro auto-detects codec from header (snappy, deflate, null, etc.)
@@ -114,11 +115,13 @@ class AvroOCFSource(DataSource):
             )
 
         try:
-            return pd.DataFrame(records)
+            return AvroToArrowConverter().avro_to_table(
+                records=records, avro_schema=schema
+            )
         except Exception as e:
-            logger.error(f"DataFrame conversion failed: {e}", exc_info=True)
+            logger.error(f"PyArrow conversion failed: {e}", exc_info=True)
             raise HTTPException(
-                status_code=500, detail=f"DataFrame conversion failed: {str(e)}"
+                status_code=500, detail=f"PyArrow conversion failed: {str(e)}"
             )
 
     @staticmethod

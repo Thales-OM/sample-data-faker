@@ -1,4 +1,4 @@
 from .avro_id import AvroSchemaFieldIdAssigner
-from .avro_to_arrow import CustomAvroToArrowConverter
+from .avro_to_arrow import AvroToArrowConverter
 
-__all__ = ["AvroSchemaFieldIdAssigner", "CustomAvroToArrowConverter"]
+__all__ = ["AvroSchemaFieldIdAssigner", "AvroToArrowConverter"]
