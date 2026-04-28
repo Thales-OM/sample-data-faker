@@ -1,6 +1,31 @@
-from typing import Annotated
+from typing import Annotated, Any, Dict
 from urllib.parse import urlparse
-from pydantic import AfterValidator
+from pydantic import AfterValidator, BeforeValidator
+import json
+
+
+def _parse_json_or_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+
+    # String -> attempt JSON parse
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON string: {e}") from e
+
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                f"JSON must decode to a dict/object, got {type(parsed).__name__}"
+            )
+        return parsed
+
+    # Everything else -> reject
+    raise ValueError(f"Expected dict or JSON string, got {type(value).__name__}")
+
+
+JsonDict = Annotated[Dict[str, Any], BeforeValidator(_parse_json_or_dict)]
 
 
 def _validate_hive_metastore_uri(value: str) -> str:

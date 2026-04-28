@@ -2,14 +2,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, HttpUrl, field_validator
 from typing import Optional, Type, Literal
 from .secrets import DumpableSecretsBaseModel
-from .types import HiveMetastoreUri
+from .types import HiveMetastoreUri, JsonDict
 from .constants import (
     SDVSynthesizer,
     DEFAULT_LOG_LEVEL,
     BaseSynthesizer,
     SYNTHESIZER_MAP,
     APP_VERSION,
-    DEFAULT_MAX_WORKERS,
+    DEFAULT_MAX_THREADS,
     DEFAULT_MAX_PENDING,
 )
 
@@ -78,11 +78,6 @@ class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     model_config = SettingsConfigDict(populate_by_name=True)
 
 
-class ResourceSettings(BaseSettings):
-    max_concurrent_generations: int = 4
-    request_timeout_seconds: int = 300
-
-
 class FatAPISettings(BaseSettings):
     root_path: str = ""
     version: str = APP_VERSION
@@ -101,11 +96,14 @@ class Settings(BaseSettings):
     fastapi: FatAPISettings = FatAPISettings()
 
     # SDV & queue
-    max_workers: int = Field(DEFAULT_MAX_WORKERS, ge=1)
-    max_pending: int = Field(DEFAULT_MAX_PENDING, ge=1)
+    max_threads: int = Field(
+        DEFAULT_MAX_THREADS,
+        ge=1,
+        description="How much concurrent workloads to run at max",
+    )
+    max_pending: int = Field(DEFAULT_MAX_PENDING, ge=1, description="Max backpressure")
     sdv_model_type: SDVSynthesizer = SDVSynthesizer.GAUSSIAN_COPULA
-    sdv_model_params: dict = {}
-    cleanup_on_complete: bool = True
+    sdv_model_params: JsonDict = Field(default_factory=dict)
 
     # Logging
     log_level: str = DEFAULT_LOG_LEVEL
