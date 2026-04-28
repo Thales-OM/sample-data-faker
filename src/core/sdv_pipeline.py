@@ -1,10 +1,9 @@
 import pyarrow as pa
-from typing import Dict, Optional, Any, Tuple, Union
+import pandas as pd
+from enum import StrEnum
+from typing import Optional, Union, Tuple, overload, Type, Dict, Any
 from sdv.metadata import Metadata
-from sdv.single_table import (
-    CTGANSynthesizer,
-    GaussianCopulaSynthesizer,
-)
+from sdv.single_table.base import BaseSingleTableSynthesizer
 from src.core.flatten import DataFrameFlattener
 from src.logger import LoggerFactory
 
@@ -12,151 +11,120 @@ from src.logger import LoggerFactory
 logger = LoggerFactory.getLogger(__name__)
 
 
+class PipelineInputType(StrEnum):
+    PANDAS = "pandas"
+    PYARROW = "pyarrow"
+
+
+# TODO: Could be helpful to hint Generic[T] for .fit()/.sample() type connection, but may confuse pylance
 class SDVPipeline:
     """
     Complete pipeline for generating synthetic data using SDV.
 
     Handles the full lifecycle:
-    - Input: Nested PyArrow Table (from Avro or other sources)
+    - Input: Nested PyArrow Table OR pandas DataFrame (from various sources)
     - Flatten for SDV consumption
     - Create metadata for SDV
     - Fit synthesizer
     - Generate synthetic flat data
-    - Unflatten back to nested PyArrow Table
+    - Unflatten back to nested structure
     """
 
     def __init__(
         self,
-        synthesizer_class: Union[
-            type[GaussianCopulaSynthesizer], type[CTGANSynthesizer]
-        ],
-        enforce_min_max_values: bool = True,
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
+        model_params: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the SDV pipeline.
 
         Args:
-            synthesizer_class (Union[type[GaussianCopulaSynthesizer], type[CTGANSynthesizer]]): SDV synthesizer class.
-            enforce_min_max_values (bool, optional): Whether to enforce minimum/maximum values for numerical fields. Defaults to True.
+            synthesizer_cls (Type[BaseSingleTableSynthesizer]): SDV compatible single table synthesizer class.
+            model_params (Optional[Dict[str, Any]], optional): Additional params for synthesizer. Defaults to None.
         """
-        self.synthesizer_class = synthesizer_class
-        self.enforce_min_max_values = enforce_min_max_values
+        self._synthesizer_cls = synthesizer_cls
+        self._synthesizer: Optional[BaseSingleTableSynthesizer] = None
+        self._model_params: Dict[str, Any] = model_params or dict()
 
         self._flattener = DataFrameFlattener()
         self._metadata: Optional[Metadata] = None
-        self._synthesizer: Optional[
-            Union[GaussianCopulaSynthesizer, CTGANSynthesizer]
-        ] = None
-        self._array_metadata: Dict[str, Dict[str, Any]] = {}
+        self._input_type: Optional[PipelineInputType] = None
 
     @property
-    def metadata(self) -> Optional[Metadata]:
+    def synthesizer(self) -> BaseSingleTableSynthesizer:
+        if not self._synthesizer:
+            raise RuntimeError("Call .fit() before accessing .synthesizer property")
+        return self._synthesizer
+
+    @property
+    def metadata(self) -> Metadata:
+        if not self._metadata:
+            raise RuntimeError("Call .fit() before accessing .metadata property")
         return self._metadata
 
-    def flatten(self, table: pa.Table) -> pa.Table:
+    @overload
+    def flatten(self, data: pa.Table) -> pa.Table: ...
+
+    @overload
+    def flatten(self, data: pd.DataFrame) -> pd.DataFrame: ...
+
+    def flatten(
+        self, data: Union[pa.Table, pd.DataFrame]
+    ) -> Union[pa.Table, pd.DataFrame]:
         """
-        Flatten a nested PyArrow Table for SDV consumption.
+        Flatten a nested PyArrow Table OR pandas DataFrame for SDV consumption.
 
         Args:
-            table: Input PyArrow Table with nested structures
+            data (Union[pyarrow.Table, pandas.DataFrame]): Input with nested structures (either PyArrow Table or pandas DataFrame).
+
+        Raises:
+            TypeError: Unexpected input type.
 
         Returns:
-            Flattened PyArrow Table
+            Union[pyarrow.Table, pandas.DataFrame]: Flattened data of the same type as input
         """
-        flat_table = self._flattener.flatten(data=table)
+        if isinstance(data, (pa.Table, pd.DataFrame)):
+            return self._flattener.flatten(data=data)
+        raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(data)}")
 
-        self._array_metadata = self._extract_array_metadata(flat_table)
-
-        return flat_table
-
-    def _extract_array_metadata(
+    def fit(
         self,
-        flat_table: pa.Table,
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Extract metadata about array columns from flat table.
-
-        This helps us understand how to reconstruct arrays
-        during unflatten.
-
-        Args:
-            flat_table: Flattened PyArrow Table
-
-        Returns:
-            Dictionary mapping array paths to their metadata
-        """
-        array_metadata = {}
-
-        for col_name in flat_table.column_names:
-            if "__" in col_name:
-                base, idx_str = col_name.rsplit("__", 1)
-                try:
-                    idx = int(idx_str)
-                    if base not in array_metadata:
-                        array_metadata[base] = {
-                            "max_index": idx,
-                            "columns": [],
-                        }
-                    array_metadata[base]["max_index"] = max(
-                        array_metadata[base]["max_index"],
-                        idx,
-                    )
-                    array_metadata[base]["columns"].append(col_name)
-                except ValueError:
-                    pass
-
-        for base in array_metadata:
-            meta = array_metadata[base]
-            meta["num_elements"] = meta["max_index"] + 1
-            meta["columns"] = sorted(
-                meta["columns"], key=lambda x: int(x.rsplit("__", 1)[1])
-            )
-
-        return array_metadata
-
-    def create_metadata(
-        self,
-        flat_table: pa.Table,
-    ) -> Metadata:
-        """
-        Create SDV Metadata from flat PyArrow Table.
-
-        Args:
-            flat_table: Flattened PyArrow Table
-
-        Returns:
-            SDV Metadata object
-        """
-        df = flat_table.to_pandas()
-        self._metadata = Metadata().detect_from_dataframe(df)
-        return self._metadata
-
-    def fit(self, flat_table: pa.Table) -> None:
+        data: Union[pa.Table, pd.DataFrame],
+    ) -> BaseSingleTableSynthesizer:
         """
         Fit an SDV synthesizer on the flat data.
 
         Args:
-            flat_table: Flattened PyArrow Table
+            data (Union[pa.Table, pd.DataFrame]): Flattened PyArrow Table or pandas DataFrame.
+
+        Raises:
+            TypeError: Wrong "data" argument type.
 
         Returns:
-            self for chaining
+            BaseSingleTableSynthesizer: Fitted synthesizer instance.
         """
-
-        df = flat_table.to_pandas()
+        if isinstance(data, pa.Table):
+            self._input_type = PipelineInputType.PYARROW
+            df = data.to_pandas()
+        elif isinstance(data, pd.DataFrame):
+            self._input_type = PipelineInputType.PANDAS
+            df = data
+        else:
+            raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(data)}")
 
         if self._metadata is None:
-            self.create_metadata(flat_table)
+            self._metadata = Metadata().detect_from_dataframe(df)
 
-        self._synthesizer = self.synthesizer_class(
-            metadata=self._metadata, enforce_min_max_values=self.enforce_min_max_values
+        self._synthesizer = self._synthesizer_cls(
+            metadata=self._metadata, enforce_min_max_values=True, **self._model_params
         )
-
         self._synthesizer.fit(df)
+        return self._synthesizer
 
     def sample(
         self,
         num_rows: int,
-    ) -> pa.Table:
+    ) -> Union[pa.Table, pd.DataFrame]:
         """
         Sample synthetic datapoints (rows) from fitted synthesizer.
 
@@ -167,94 +135,125 @@ class SDVPipeline:
             RuntimeError: Calling sample() before calling fit().
 
         Returns:
-            pa.Table: Flattened PyArrow Table with generated data.
+            Union[pa.Table, pd.DataFrame]: Flat data of the same type as the .fit() input (pa.Table or pd.DataFrame)
         """
-        if self._synthesizer is None:
-            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+        if not self._synthesizer:
+            raise RuntimeError(
+                "Synthesizer not fitted with training data. Call fit() first."
+            )
 
         synth_df = self._synthesizer.sample(num_rows=num_rows)
 
-        return pa.Table.from_pandas(synth_df)
+        if self._input_type == PipelineInputType.PYARROW:
+            adjusted_df = self._normalize_array_lengths(
+                data=synth_df, target_rows=synth_df.shape[0]
+            )
+            return pa.Table.from_pandas(adjusted_df)
+        return synth_df
+
+    @staticmethod
+    def _normalize_array_lengths(
+        data: pd.DataFrame,
+        target_rows: int,
+    ) -> pd.DataFrame:
+        """
+        Normalize array column lengths to match target row count.
+
+        SDV generates arrays with independent patterns, which can result in
+        column lengths that don't match the target row count. This normalizes
+        all columns to have exactly target_rows elements.
+
+        Args:
+            data: DataFrame or Table with potentially mismatched array lengths
+            target_rows: Expected number of rows
+
+        Returns:
+            DataFrame with normalized column lengths
+        """
+        if isinstance(data, pa.Table):
+            df = data.to_pandas()
+        else:
+            df = data
+
+        result_df = pd.DataFrame()
+        for col_name in df.columns:
+            values = df[col_name].tolist()
+            if len(values) != target_rows:
+                if len(values) > target_rows:
+                    values = values[:target_rows]
+                else:
+                    values = values + [None] * (target_rows - len(values))
+            result_df[col_name] = values
+        return result_df
+
+    @overload
+    def unflatten(self, data: pa.Table) -> pa.Table: ...
+
+    @overload
+    def unflatten(self, data: pd.DataFrame) -> pd.DataFrame: ...
 
     def unflatten(
-        self,
-        flat_table: pa.Table,
-    ) -> pa.Table:
+        self, data: Union[pa.Table, pd.DataFrame]
+    ) -> Union[pa.Table, pd.DataFrame]:
         """
         Unflatten a flat table back to nested structure.
 
         Args:
-            flat_table: Flattened PyArrow Table (from SDV generation)
+            data: Flattened data (from SDV generation)
 
         Returns:
-            Nested PyArrow Table with original schema
+            Nested data of the same type as original input (if it was Table),
+            or DataFrame with original structure preserved
         """
-        max_num_rows = flat_table.num_rows
+        if isinstance(data, (pa.Table, pd.DataFrame)):
+            return self._flattener.unflatten(flat_data=data)
+        raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(data)}")
 
-        if self._array_metadata:
-            flat_table = self._adjust_array_lengths(
-                flat_table,
-                self._array_metadata,
-                max_num_rows,
-            )
-
-        return self._flattener.unflatten(flat_data=flat_table)
-
-    def _adjust_array_lengths(
-        self,
-        flat_table: pa.Table,
-        array_metadata: Dict[str, Dict[str, Any]],
-        target_rows: int,
-    ) -> pa.Table:
-        """
-        Adjust array columns to match expected lengths.
-
-        SDV generates arrays that may have different patterns than
-        the original. This adjusts them to create valid lists.
-
-        Args:
-            flat_table: Flat table with potentially mismatched array lengths
-            array_metadata: Metadata about array columns
-            target_rows: Target number of rows
-
-        Returns:
-            Adjusted flat table
-        """
-        result_data = {}
-
-        for col_name in flat_table.column_names:
-            col = flat_table.column(col_name)
-            values = col.to_pylist()
-
-            if len(values) != target_rows:
-                values = values[:target_rows]
-                if len(values) < target_rows:
-                    values.extend([None] * (target_rows - len(values)))
-
-            result_data[col_name] = values
-
-        return pa.Table.from_pydict(result_data)
-
-    def pipeline(
-        self,
-        table: pa.Table,
+    @overload
+    @classmethod
+    def run_pipeline(
+        cls,
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
+        data: pa.Table,
+        model_params: Optional[Dict[str, Any]] = None,
         num_rows: int = 100,
-    ) -> Tuple[pa.Table, Metadata]:
+    ) -> Tuple[pa.Table, Metadata, BaseSingleTableSynthesizer]: ...
+
+    @overload
+    @classmethod
+    def run_pipeline(
+        cls,
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
+        data: pd.DataFrame,
+        model_params: Optional[Dict[str, Any]] = None,
+        num_rows: int = 100,
+    ) -> Tuple[pd.DataFrame, Metadata, BaseSingleTableSynthesizer]: ...
+
+    @classmethod
+    def run_pipeline(
+        cls,
+        synthesizer_cls: Type[BaseSingleTableSynthesizer],
+        data: Union[pa.Table, pd.DataFrame],
+        model_params: Optional[Dict[str, Any]] = None,
+        num_rows: int = 100,
+    ) -> Tuple[Union[pa.Table, pd.DataFrame], Metadata, BaseSingleTableSynthesizer]:
         """
-        Run the complete pipeline end-to-end.
+        Create and run complete pipeline end-to-end.
 
         Args:
-            table (pa.Table): Input PyArrow Table
+            synthesizer (BaseSingleTableSynthesizer): SDV single table synthesizer instance.
+            data (Union[pa.Table, pd.DataFrame]): Input data.
+            model_params (Optional[Dict[str, Any]], optional): Additional params for synthesizer. Defaults to None.
             num_rows (int, optional): Number of synthetic rows to generate. Defaults to 100.
 
         Returns:
-            Tuple[pa.Table, Metadata]: Tuple of (generated nested table, SDV metadata)
+            Tuple[Union[pa.Table, pd.DataFrame], Metadata]: Tuple of (generated nested data, SDV metadata)
         """
-        flat_table = self.flatten(table)
-        self.create_metadata(flat_table)
+        pipeline = cls(synthesizer_cls=synthesizer_cls, model_params=model_params)
+        flat_data = pipeline.flatten(data)
 
-        self.fit(flat_table)
-        gen_flat = self.sample(num_rows)
+        pipeline.fit(flat_data)
+        gen_flat = pipeline.sample(num_rows)
 
-        gen_table = self.unflatten(gen_flat)
-        return gen_table, self._metadata
+        gen_data = pipeline.unflatten(gen_flat)
+        return gen_data, pipeline.metadata, pipeline.synthesizer
