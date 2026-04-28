@@ -78,6 +78,7 @@ class DataFrameFlattener:
         self._schema: Dict[str, ColumnSchema] = {}
         self._original_columns: List[str] = []
         self._input_is_pyarrow: bool = False
+        self._array_metadata: Dict[str, Dict[str, Any]] = {}
 
     @property
     def schema(self) -> Dict[str, ColumnSchema]:
@@ -104,8 +105,96 @@ class DataFrameFlattener:
 
     def flatten(self, data):
         if isinstance(data, pa.Table):
-            return self._flatten_pyarrow(data)
-        return self._flatten_pandas(data)
+            return self._flatten_pyarrow(table=data)
+        elif isinstance(data, pd.DataFrame):
+            return self._flatten_pandas(df=data)
+        raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(data)}")
+
+    @staticmethod
+    def _extract_array_metadata(
+        flat_table: pa.Table,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Extract metadata about array columns from flat PyArrow table.
+
+        This helps reconstruct arrays during unflatten.
+
+        Args:
+            flat_table: Flattened PyArrow Table
+
+        Returns:
+            Dictionary mapping array paths to their metadata
+        """
+        array_metadata = {}
+
+        for col_name in flat_table.column_names:
+            if "__" in col_name:
+                base, idx_str = col_name.rsplit("__", 1)
+                try:
+                    idx = int(idx_str)
+                    if base not in array_metadata:
+                        array_metadata[base] = {
+                            "max_index": idx,
+                            "columns": [],
+                        }
+                    array_metadata[base]["max_index"] = max(
+                        array_metadata[base]["max_index"],
+                        idx,
+                    )
+                    array_metadata[base]["columns"].append(col_name)
+                except ValueError:
+                    pass
+
+        for base in array_metadata:
+            meta = array_metadata[base]
+            meta["num_elements"] = meta["max_index"] + 1
+            meta["columns"] = sorted(
+                meta["columns"], key=lambda x: int(x.rsplit("__", 1)[1])
+            )
+
+        return array_metadata
+
+    @staticmethod
+    def _extract_array_metadata_from_dataframe(
+        flat_df: pd.DataFrame,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Extract metadata about array columns from flat pandas DataFrame.
+
+        Args:
+            flat_df: Flattened pandas DataFrame
+
+        Returns:
+            Dictionary mapping array paths to their metadata
+        """
+        array_metadata = {}
+
+        for col_name in flat_df.columns:
+            if "__" in col_name:
+                base, idx_str = col_name.rsplit("__", 1)
+                try:
+                    idx = int(idx_str)
+                    if base not in array_metadata:
+                        array_metadata[base] = {
+                            "max_index": idx,
+                            "columns": [],
+                        }
+                    array_metadata[base]["max_index"] = max(
+                        array_metadata[base]["max_index"],
+                        idx,
+                    )
+                    array_metadata[base]["columns"].append(col_name)
+                except ValueError:
+                    pass
+
+        for base in array_metadata:
+            meta = array_metadata[base]
+            meta["num_elements"] = meta["max_index"] + 1
+            meta["columns"] = sorted(
+                meta["columns"], key=lambda x: int(x.rsplit("__", 1)[1])
+            )
+
+        return array_metadata
 
     @overload
     def unflatten(self, flat_data: pa.Table) -> pa.Table: ...
@@ -116,16 +205,16 @@ class DataFrameFlattener:
     def unflatten(self, flat_data):
         if isinstance(flat_data, pa.Table):
             return self._unflatten_pyarrow(flat_data)
-        return self._unflatten_pandas(flat_data)
+        if isinstance(flat_data, pd.DataFrame):
+            return self._unflatten_pandas(flat_data)
+        raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(flat_data)}")
 
     def _to_pandas(self, data: Union[pd.DataFrame, pa.Table]) -> pd.DataFrame:
         if isinstance(data, pa.Table):
             return data.to_pandas()
         return data
 
-    def _from_pandas(
-        self, df: pd.DataFrame
-    ) -> Union[pd.DataFrame, pa.Table]:
+    def _from_pandas(self, df: pd.DataFrame) -> Union[pd.DataFrame, pa.Table]:
         if self._input_is_pyarrow:
             return pa.Table.from_pandas(df)
         return df
@@ -146,7 +235,9 @@ class DataFrameFlattener:
             col_types[col_name] = col.type
             col_schema = self._build_column_schema_from_arrow(col_name, col)
             self._schema[col_name] = col_schema
-            flat_col_data = self._flatten_column_arrow(col, col_schema.root_node, [col_name])
+            flat_col_data = self._flatten_column_arrow(
+                col, col_schema.root_node, [col_name]
+            )
             flat_columns.update(flat_col_data)
 
         self._input_is_pyarrow = True
@@ -172,9 +263,13 @@ class DataFrameFlattener:
                     try:
                         arrays.append(pa.chunked_array([values]))
                     except OverflowError:
-                        safe_values = [str(v) if v is not None else None for v in values]
+                        safe_values = [
+                            str(v) if v is not None else None for v in values
+                        ]
                         arrays.append(pa.chunked_array([safe_values], type=pa.string()))
-        return pa.Table.from_arrays(arrays, names=col_names)
+        flat_table = pa.Table.from_arrays(arrays, names=col_names)
+        self._array_metadata = self._extract_array_metadata(flat_table=flat_table)
+        return flat_table
 
     def _chunked_array_to_list(self, col: pa.ChunkedArray) -> List[Any]:
         if pa.types.is_timestamp(col.type):
@@ -208,7 +303,7 @@ class DataFrameFlattener:
         return result
 
     def _is_extension_type(self, arrow_type) -> bool:
-        return hasattr(arrow_type, 'storage_type')
+        return hasattr(arrow_type, "storage_type")
 
     def _extract_struct_value(self, struct_scalar: pa.StructScalar) -> Dict[str, Any]:
         struct_dict = {}
@@ -316,7 +411,11 @@ class DataFrameFlattener:
             flat_col_data = self._flatten_column(series, col_schema.root_node, [col])
             flat_data.update(flat_col_data)
 
-        return pd.DataFrame(flat_data, index=df.index)
+        flat_df = pd.DataFrame(flat_data, index=df.index)
+        self._array_metadata = self._extract_array_metadata_from_dataframe(
+            flat_df=flat_df
+        )
+        return flat_df
 
     def _unflatten_pyarrow(self, flat_table: pa.Table) -> pa.Table:
         if not self._schema:
@@ -393,9 +492,7 @@ class DataFrameFlattener:
         if not non_null:
             return ColumnSchema(
                 name=col_name,
-                root_node=SchemaNode(
-                    node_type=NodeType.SCALAR, dtype=str(col_type)
-                ),
+                root_node=SchemaNode(node_type=NodeType.SCALAR, dtype=str(col_type)),
             )
 
         root_node = self._infer_schema_from_values_arrow(non_null, col_type)
@@ -437,8 +534,8 @@ class DataFrameFlattener:
             )
         elif pa.types.is_struct(pa_type):
             children = {}
-            for i, field in enumerate(pa_type):
-                field_name = field.name
+            for i, pa_field in enumerate(pa_type):
+                field_name = pa_field.name
                 field_values = []
                 for v in values:
                     if isinstance(v, dict):
@@ -448,7 +545,7 @@ class DataFrameFlattener:
                     else:
                         field_values.append(None)
                 children[field_name] = self._infer_schema_from_values_arrow(
-                    field_values, field.type
+                    field_values, pa_field.type
                 )
             return SchemaNode(node_type=NodeType.DICT, children=children)
         else:
@@ -498,9 +595,7 @@ class DataFrameFlattener:
             py_list = self._chunked_array_to_list(col)
 
             if schema_node.nullable_array:
-                result[f"{col_name}._is_null"] = [
-                    v is None for v in py_list
-                ]
+                result[f"{col_name}._is_null"] = [v is None for v in py_list]
 
             for i in range(max_elements):
                 element_values = []
@@ -547,9 +642,7 @@ class DataFrameFlattener:
             max_elements = schema_node.max_elements
 
             if schema_node.nullable_array:
-                result[f"{col_name}._is_null"] = [
-                    v is None for v in col_data
-                ]
+                result[f"{col_name}._is_null"] = [v is None for v in col_data]
 
             for i in range(max_elements):
                 element_values = []
@@ -577,12 +670,14 @@ class DataFrameFlattener:
             return flat_table.column(col_name)
 
         elif schema_node.node_type == NodeType.DICT:
-            return self._unflatten_dict_column_arrow(flat_table, col_schema, schema_node)
+            return self._unflatten_dict_column_arrow(
+                flat_table, col_schema, schema_node
+            )
 
         elif schema_node.node_type == NodeType.ARRAY:
             max_elements = schema_node.max_elements
             element_schema = schema_node.element_schema
-            
+
             if element_schema and element_schema.node_type == NodeType.DICT:
                 nested_fields = self._build_struct_fields(element_schema)
                 element_type = pa.struct(nested_fields)
@@ -601,61 +696,16 @@ class DataFrameFlattener:
                 result_array = pa.array(result_list, type=list_type)
                 return pa.chunked_array([result_array])
             else:
-                result_lists: List[List[Any]] = [[] for _ in range(max_elements)]
+                result_lists: List[List[Any]] = [[] for _ in range(flat_table.num_rows)]
                 for i in range(max_elements):
                     indexed_col_name = f"{col_name}__{i}"
                     if indexed_col_name in flat_table.column_names:
                         col = flat_table.column(indexed_col_name)
-                        result_lists[i] = col.to_pylist()
+                        col_values = col.to_pylist()
                     else:
-                        result_lists[i] = [None] * flat_table.num_rows
-                result_array = pa.array(result_lists)
-                return pa.chunked_array([result_array])
-
-        return flat_table.column(col_name)
-
-    def _unflatten_column_arrow(
-        self, flat_table: pa.Table, col_schema: ColumnSchema
-    ) -> pa.Array:
-        schema_node = col_schema.root_node
-        col_name = col_schema.name
-
-        if schema_node.node_type == NodeType.SCALAR:
-            return flat_table.column(col_name)
-
-        elif schema_node.node_type == NodeType.DICT:
-            return self._unflatten_dict_column_arrow(flat_table, col_schema, schema_node)
-
-        elif schema_node.node_type == NodeType.ARRAY:
-            max_elements = schema_node.max_elements
-            element_schema = schema_node.element_schema
-            
-            if element_schema and element_schema.node_type == NodeType.DICT:
-                nested_fields = self._build_struct_fields(element_schema)
-                element_type = pa.struct(nested_fields)
-                list_type = pa.list_(element_type)
-                result_list = []
-                for row_idx in range(flat_table.num_rows):
-                    row_items = []
-                    for i in range(max_elements):
-                        struct_col = flat_table.column(f"{col_name}__{i}")
-                        struct_values = struct_col.to_pylist()
-                        if row_idx < len(struct_values):
-                            row_items.append(struct_values[row_idx])
-                        else:
-                            row_items.append(None)
-                    result_list.append(row_items)
-                result_array = pa.array(result_list, type=list_type)
-                return pa.chunked_array([result_array])
-            else:
-                result_lists: List[List[Any]] = [[] for _ in range(max_elements)]
-                for i in range(max_elements):
-                    indexed_col_name = f"{col_name}__{i}"
-                    if indexed_col_name in flat_table.column_names:
-                        col = flat_table.column(indexed_col_name)
-                        result_lists[i] = col.to_pylist()
-                    else:
-                        result_lists[i] = [None] * flat_table.num_rows
+                        col_values = [None] * flat_table.num_rows
+                    for row_idx, val in enumerate(col_values):
+                        result_lists[row_idx].append(val)
                 result_array = pa.array(result_lists)
                 return pa.chunked_array([result_array])
 
