@@ -41,11 +41,11 @@ class TestHealthEndpoints:
     def test_readiness_at_capacity(self):
         """Test /readiness returns 503 when at capacity."""
         app = create_app()
-        settings = Settings(max_workers=1, max_pending=1)
+        settings = Settings(max_threads=1, max_pending=1)
 
         app.state.settings = settings
         app.state.worker = SyntheticDataWorker(
-            max_workers=settings.max_workers,
+            max_workers=settings.max_threads,
             max_pending=settings.max_pending,
         )
         app.state.omd_async_client = None

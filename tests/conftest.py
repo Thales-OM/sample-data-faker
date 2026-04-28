@@ -214,9 +214,8 @@ def parquet_file(sample_dataframe: pd.DataFrame) -> Generator[str, None, None]:
 def test_settings() -> Settings:
     """Create test settings."""
     return Settings(
-        max_workers=2,
+        max_threads=2,
         max_pending=3,
-        cleanup_on_complete=True,
     )
 
 
@@ -228,7 +227,7 @@ def test_client(test_settings: Settings) -> Generator[TestClient, None, None]:
     # Override state with test settings
     app.state.settings = test_settings
     app.state.worker = SyntheticDataWorker(
-        max_workers=test_settings.max_workers,
+        max_workers=test_settings.max_threads,
         max_pending=test_settings.max_pending,
     )
     app.state.omd_async_client = None
@@ -251,7 +250,7 @@ def test_client_with_omd(test_settings: Settings) -> Generator[TestClient, None,
 
     app.state.settings = test_settings
     app.state.worker = SyntheticDataWorker(
-        max_workers=test_settings.max_workers,
+        max_workers=test_settings.max_threads,
         max_pending=test_settings.max_pending,
     )
 
