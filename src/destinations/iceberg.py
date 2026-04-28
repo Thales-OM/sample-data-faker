@@ -1,8 +1,9 @@
 import asyncio
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Literal
 from dataclasses import dataclass
 import pandas as pd
 import pyarrow as pa
+from pydantic import Field, PrivateAttr
 from pyiceberg.io.pyarrow import pyarrow_to_schema
 from pyiceberg.catalog import Catalog, load_catalog
 from pyiceberg.table import Table
@@ -12,11 +13,9 @@ from pyiceberg.exceptions import (
     NamespaceAlreadyExistsError,
 )
 from pyiceberg.schema import Schema
-from pyiceberg.utils.schema_conversion import AvroSchemaConversion
 from src.config import HMSS3DestinationConfig
-from src.sources.avro_ocf import AvroSchemaFieldIdAssigner
 from src.logger import LoggerFactory
-from .base import BaseDestination, BaseDestinationResponse
+from .base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
 
 
 logger = LoggerFactory.getLogger(__name__)
@@ -49,6 +48,15 @@ class IcebergDestinationError(Exception):
         self.operation = operation  # e.g., "create_table", "load_table", "write_data"
 
 
+class IcebergDestinationConfig(BaseDestinationConfig, HMSS3DestinationConfig):
+    table_name: str
+    namespace: str = "default"
+    avro_schema: Optional[Dict[str, Any]] = None
+    iceberg_schema: Optional[Union[Schema, Dict[str, Any]]] = None
+    partition_spec: Optional[Any] = None
+    write_properties: Dict[str, str] = Field(default_factory=dict)
+
+
 class IcebergDestination(BaseDestination):
     """
     Asynchronous destination class that writes Pandas DataFrames to Apache Iceberg tables.
@@ -58,38 +66,13 @@ class IcebergDestination(BaseDestination):
     - Tables are stored in: s3://{bucket}/{warehouse-path}/{namespace}.db/{title}/
     - Data files: s3://.../{namespace}.db/{title}/data/*.parquet
     - Metadata: s3://.../{namespace}.db/{title}/metadata/*.json
-
-    Usage:
-        # Option 1: Using namespace and title (recommended for consistency with S3Destination)
-        dest = IcebergDestination(config)
-        await dest.submit(df, namespace="ecommerce", title="users")
-        # → Table: "ecommerce.users"
-        # → S3: s3://bucket/iceberg-tables/ecommerce.db/users/
-
-        # Option 2: Direct table identifier
-        await dest.submit(df, table_identifier="ecommerce.users")
     """
 
-    def __init__(
-        self,
-        config: HMSS3DestinationConfig,
-        partition_spec: Optional[Any] = None,
-        write_properties: Optional[Dict[str, str]] = None,
-    ):
-        """
-        Initialize the Iceberg Destination.
+    type: Literal["iceberg"]
+    config: IcebergDestinationConfig
 
-        Args:
-            config: Config to connect to Hive Metastore with S3 storage
-            partition_spec: Optional Iceberg partition spec.
-            write_properties: Optional properties for the write operation.
-        """
-        self.config = config
-        self.partition_spec = partition_spec
-        self.write_properties = write_properties or {}
-
-        # Lazy load catalog
-        self._catalog: Optional[Catalog] = None
+    # Lazy load catalog
+    _catalog: Optional[Catalog] = PrivateAttr(None)
 
     @property
     def catalog(self) -> Catalog:
@@ -100,8 +83,55 @@ class IcebergDestination(BaseDestination):
             self._catalog = load_catalog(**catalog_conn_properties)
         return self._catalog
 
-    def _build_table_identifier(
+    async def submit(
         self,
+        data: Union[pd.DataFrame, pa.Table],
+    ) -> IcebergDestinationResponse:
+        """
+        Submit data to the configured Iceberg destination.
+
+        Args:
+            data (Union[pd.DataFrame, pa.Table]): Dataframe or table to write
+
+        Raises:
+            IcebergDestinationError: Error occurred during preprocessing or upload
+
+        Returns:
+            IcebergDestinationResponse: Info about resulting table
+        """
+        # Build table identifier
+        resolved_table_id = self._build_table_identifier(
+            table_name=self.config.table_name, namespace=self.config.namespace
+        )
+
+        # Get S3 location for response
+        s3_location = self._get_s3_location(
+            table_name=self.config.table_name, namespace=self.config.namespace
+        )
+
+        try:
+            # Offload blocking I/O to a thread
+            response = await asyncio.to_thread(
+                self._submit_sync,
+                data,
+                resolved_table_id,
+                s3_location,
+            )
+            return response
+        except IcebergDestinationError:
+            # Re-raise custom exceptions as-is
+            raise
+        except Exception as e:
+            logger.error(f"Failed to write to Iceberg table {resolved_table_id}: {e}")
+            raise IcebergDestinationError(
+                message=f"Failed to write to Iceberg table {resolved_table_id}",
+                cause=e,
+                table_identifier=resolved_table_id,
+                operation="submit",
+            ) from e
+
+    @staticmethod
+    def _build_table_identifier(
         table_name: str,
         namespace: str,
     ) -> str:
@@ -138,98 +168,21 @@ class IcebergDestination(BaseDestination):
         s3_location = f"s3://{bucket}/{warehouse_path}{namespace}.db/{table_name}/"
         return s3_location
 
-    async def submit(
-        self,
-        df: pd.DataFrame,
-        table_name: str,
-        namespace: str = "default",
-        avro_schema: Optional[Dict[str, Any]] = None,
-        iceberg_schema: Optional[Union[Schema, Dict[str, Any]]] = None,
-    ) -> IcebergDestinationResponse:
-        """
-        Submit data to the configured Iceberg destination.
-
-        Args:
-            df: DataFrame with data to write
-            namespace: Optional namespace for table (default: "default")
-            table_name: Table name (e.g., "users")
-            avro_schema: Optional Avro schema for schema reconciliation
-            iceberg_schema: Optional Iceberg schema for schema reconciliation
-
-        Returns:
-            IcebergDestinationResponse with metadata about the write operation
-
-        Examples:
-            await dest.submit(df, namespace="ecommerce", title="users")
-        """
-        # Build table identifier
-        resolved_table_id = self._build_table_identifier(
-            table_name=table_name, namespace=namespace
-        )
-
-        # Get S3 location for response
-        s3_location = self._get_s3_location(table_name=table_name, namespace=namespace)
-
-        try:
-            # Offload blocking I/O to a thread
-            response = await asyncio.to_thread(
-                self._submit_sync,
-                df,
-                resolved_table_id,
-                avro_schema,
-                iceberg_schema,
-                s3_location,
-            )
-            return response
-        except IcebergDestinationError:
-            # Re-raise custom exceptions as-is
-            raise
-        except Exception as e:
-            logger.error(f"Failed to write to Iceberg table {resolved_table_id}: {e}")
-            raise IcebergDestinationError(
-                message=f"Failed to write to Iceberg table {resolved_table_id}",
-                cause=e,
-                table_identifier=resolved_table_id,
-                operation="submit",
-            ) from e
-
     def _submit_sync(
         self,
-        df: pd.DataFrame,
+        data: Union[pd.DataFrame, pa.Table],
         table_identifier: str,
-        avro_schema: Optional[Dict[str, Any]] = None,
-        iceberg_schema: Optional[Union[Schema, Dict[str, Any]]] = None,
         s3_location: Optional[str] = None,
     ) -> IcebergDestinationResponse:
         """
         Synchronous core logic for schema reconciliation and writing.
         """
         try:
-            # Generate schema
-            if avro_schema:
-                if iceberg_schema:
-                    logger.warning(
-                        "Both avro_schema and iceberg_schema were provided. iceberg_schema takes precedence."
-                    )
-                else:
-                    enriched_avro_schema = AvroSchemaFieldIdAssigner(
-                        catalog=self.catalog
-                    ).assign_field_ids(
-                        avro_schema=avro_schema,
-                        table_identifier=table_identifier,
-                        start_id=1,
-                    )
-                    iceberg_schema = AvroSchemaConversion().avro_to_iceberg(
-                        avro_schema=enriched_avro_schema
-                    )
-            if isinstance(iceberg_schema, dict):
-                iceberg_schema = Schema.model_validate(iceberg_schema)
+            # Convert pandas to Arrow
+            if isinstance(data, pd.DataFrame):
+                data = pa.Table.from_pandas(data, preserve_index=False)
 
-            df = self._ensure_valid_pyarrow_types(df, avro_schema)
-            arrow_table = pa.Table.from_pandas(df, preserve_index=False)
-            # No Schema was provided in args - extract from pyarrow
-            if not iceberg_schema:
-                iceberg_schema = pyarrow_to_schema(arrow_table.schema)
+            iceberg_schema = pyarrow_to_schema(data.schema)
 
             namespace = table_identifier.split(".")[0]
             try:
@@ -258,21 +211,21 @@ class IcebergDestination(BaseDestination):
                     if not created_new_table:
                         # Update schema within the same transaction as data write
                         # This ensures atomicity: both succeed or both fail
-                        # Also, .update_schema() skips metadata update if schemas are identical
+                        # Note: .update_schema() skips metadata update if schemas are identical
                         txn.update_schema(
                             allow_incompatible_changes=False, case_sensitive=True
                         ).union_by_name(new_schema=iceberg_schema)
 
                     # Append for new tables, overwrite for existing
                     if created_new_table:
-                        txn.append(arrow_table)
+                        txn.append(data)
                         logger.info(
-                            f"Appended {arrow_table.num_rows} rows to new table {table_identifier}"
+                            f"Appended {data.num_rows} rows to new table {table_identifier}"
                         )
                     else:
-                        txn.overwrite(arrow_table)
+                        txn.overwrite(data)
                         logger.info(
-                            f"Overwrote table {table_identifier} with {arrow_table.num_rows} rows"
+                            f"Overwrote table {table_identifier} with {data.num_rows} rows"
                         )
             except CommitFailedException as e:
                 raise IcebergDestinationError(
@@ -296,7 +249,7 @@ class IcebergDestination(BaseDestination):
 
             return IcebergDestinationResponse(
                 table_identifier=table_identifier,
-                rows_written=arrow_table.num_rows,
+                rows_written=data.num_rows,
                 snapshot_id=snapshot_id,
                 created_new_table=created_new_table,
                 s3_location=s3_location or "unknown",
@@ -325,10 +278,10 @@ class IcebergDestination(BaseDestination):
                 "identifier": table_identifier,
                 "schema": iceberg_schema,
             }
-            if self.partition_spec is not None:
-                create_kwargs["partition_spec"] = self.partition_spec
-            if self.write_properties is not None:
-                create_kwargs["properties"] = self.write_properties
+            if self.config.partition_spec is not None:
+                create_kwargs["partition_spec"] = self.config.partition_spec
+            if self.config.write_properties is not None:
+                create_kwargs["properties"] = self.config.write_properties
 
             table = self.catalog.create_table(**create_kwargs)
             logger.info(f"Created new table: {table_identifier}")
@@ -340,42 +293,3 @@ class IcebergDestination(BaseDestination):
                 table_identifier=table_identifier,
                 operation="create_table",
             ) from e
-
-    def _ensure_valid_pyarrow_types(
-        self, 
-        df: pd.DataFrame, 
-        avro_schema: Optional[Dict[str, Any]] = None
-    ) -> pd.DataFrame:
-        result_df = df.copy()
-        
-        fields = {}
-        if avro_schema and "fields" in avro_schema:
-            fields = {f["name"]: f["type"] for f in avro_schema["fields"]}
-        
-        decimal_cols = set()
-        for field_name, field_type in fields.items():
-            if isinstance(field_type, dict) and field_type.get("logicalType") == "decimal":
-                decimal_cols.add(field_name)
-            elif isinstance(field_type, list):
-                for ft in field_type:
-                    if isinstance(ft, dict) and ft.get("logicalType") == "decimal":
-                        decimal_cols.add(field_name)
-        
-        for col in result_df.columns:
-            base_col = col.split("[")[0].split(".")[0]
-            
-            if result_df[col].isna().all():
-                if result_df[col].dtype == "object":
-                    result_df[col] = result_df[col].fillna("")
-                    result_df[col] = result_df[col].astype("string")
-                else:
-                    result_df[col] = result_df[col].fillna(0)
-                continue
-            
-            if base_col in decimal_cols:
-                if result_df[col].dtype == "float64":
-                    result_df[col] = result_df[col].apply(
-                        lambda x: round(x, 2) if pd.notna(x) else None
-                    )
-        
-        return result_df
