@@ -2,13 +2,16 @@ from typing import Union
 import asyncio
 from fastapi import Depends, APIRouter, status, HTTPException
 from fastapi.responses import JSONResponse
-from src.core import SyntheticDataWorker, DataFrameWrapper
-from src.destinations.openmetadata import AsyncOMDClient, OpenMetadataDestination
+from src.core import SyntheticDataWorker
+from src.destinations.openmetadata import (
+    AsyncOMDClient,
+    OpenMetadataDestination,
+    OpenMetadataDestinationConfigInternal,
+)
 from src.sources.trino import TrinoSource, TrinoSourceConfig
 from src.utils import openmetadata_to_dto_table
 from src.config import DEFAULT_SAMPLE_SIZE, DEFAULT_OUTPUT_SIZE, Settings
 from src.openmetadata.models import (
-    SampleData,
     WebhookTableCreated,
     WebhookTableUpdated,
     TestMessage,
@@ -54,14 +57,17 @@ async def generate_synthetic(
         load_limit=body.load_limit,
     )
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    await OpenMetadataDestination().submit(
-        df=synthetic_df_wrap.df_clean, table_id=table_id, client=omd_async_client
-    )
+    await OpenMetadataDestination(
+        type="openmetadata",
+        config=OpenMetadataDestinationConfigInternal(
+            table_id=table_id, omd_async_client=omd_async_client
+        ),
+    ).submit(data=synthetic_data)
 
     return OpenMetadataPopulateResponse(
-        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_df_wrap)
+        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_data)
     )
 
 
@@ -133,8 +139,12 @@ async def webhook(
         load_limit=DEFAULT_SAMPLE_SIZE,
     )  # May block up to 5s if at capacity
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
-    await omd_async_client.add_sample_data(id=table_id, body=sample_data)
+    await OpenMetadataDestination(
+        type="openmetadata",
+        config=OpenMetadataDestinationConfigInternal(
+            table_id=table_id, omd_async_client=omd_async_client
+        ),
+    ).submit(data=synthetic_data)
     return WebhookResponse(message="ok")

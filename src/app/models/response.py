@@ -1,9 +1,10 @@
-from typing import List, Dict, Any
-from pydantic import RootModel, BaseModel
+from typing import List, Dict, Any, Optional
+from enum import StrEnum
+from pydantic import RootModel, BaseModel, field_validator
 from src.destinations import S3DestinationResponse, IcebergDestinationResponse
 
 
-class SyntheticResponse(RootModel[List[Dict[str, Any]]]):
+class SyntheticJSONResponse(RootModel[List[Dict[str, Any]]]):
     pass
 
 
@@ -30,15 +31,41 @@ class VersionResponse(BaseModel):
     version: str = "unknown"
 
 
-class DTOS3FileUpload(BaseModel, S3DestinationResponse):
+class S3FileUpload(BaseModel, S3DestinationResponse):
     pass
 
 
-class DTOIcebergUpload(BaseModel, IcebergDestinationResponse):
+class IcebergUpload(BaseModel, IcebergDestinationResponse):
     pass
+
+
+class UploadStatus(StrEnum):
+    SUCCESS = "success"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+class BaseUploadResult(BaseModel):
+    status: UploadStatus
+    details: Any = None
+    reason: Optional[str] = None
+    error: Optional[str] = None
+
+    @field_validator("error", mode="before")
+    @classmethod
+    def _parse_error(cls, v):
+        return str(v) if isinstance(v, Exception) else v
+
+
+class S3UploadResult(BaseUploadResult):
+    details: Optional[S3FileUpload] = None
+
+
+class IcebergUploadResult(BaseUploadResult):
+    details: Optional[IcebergUpload] = None
 
 
 class DTOAvroOCFResponse(BaseModel):
     message: str = "ok"
-    s3_file_upload: DTOS3FileUpload
-    iceberg_upload: DTOIcebergUpload
+    s3_file_upload: S3UploadResult
+    iceberg_upload: IcebergUploadResult

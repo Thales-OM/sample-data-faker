@@ -21,7 +21,7 @@ class DumpableSecretsBaseModel(BaseModel):
         warnings=True,
         fallback=None,
         serialize_as_any=False,
-    ):
+    ) -> Dict[str, Any]:
         """
         Dump model with SecretStr/SecretBytes values revealed.
         """

@@ -43,7 +43,7 @@ class OMDConfig(BaseSettings):
         return HttpUrl(str(v).rstrip("/"))
 
 
-class S3DestinationConfig(BaseSettings):
+class S3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     endpoint: Optional[HttpUrl] = Field(
         None, description="Custom S3 endpoint (for minio, etc.)"
     )

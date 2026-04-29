@@ -10,6 +10,7 @@ from .openmetadata import (
     OpenMetadataDestination,
     OpenMetadataDestinationResponse,
     OpenMetadataDestinationConfig,
+    OpenMetadataDestinationConfigInternal,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "OpenMetadataDestination",
     "OpenMetadataDestinationResponse",
     "OpenMetadataDestinationConfig",
+    "OpenMetadataDestinationConfigInternal",
 ]

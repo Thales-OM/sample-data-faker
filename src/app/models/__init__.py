@@ -1,11 +1,14 @@
 from .request import SyntheticRequest, DTOAvroOCFRequest
 from .response import (
-    SyntheticResponse,
+    SyntheticJSONResponse,
     OpenMetadataPopulateResponse,
     ReadinessResponse,
     LivenessResponse,
     WebhookResponse,
     DTOAvroOCFResponse,
+    UploadStatus,
+    S3UploadResult,
+    IcebergUploadResult,
     VersionResponse,
 )
 
@@ -13,11 +16,14 @@ from .response import (
 __all__ = [
     "SyntheticRequest",
     "DTOAvroOCFRequest",
-    "SyntheticResponse",
+    "SyntheticJSONResponse",
     "OpenMetadataPopulateResponse",
     "ReadinessResponse",
     "LivenessResponse",
     "WebhookResponse",
     "DTOAvroOCFResponse",
+    "UploadStatus",
+    "S3UploadResult",
+    "IcebergUploadResult",
     "VersionResponse",
 ]

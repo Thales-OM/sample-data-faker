@@ -1,11 +1,23 @@
 import asyncio
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, HTTPException
 from src.logger import LoggerFactory
 from src.config import Settings
-from src.destinations import S3Destination, FileFormat, IcebergDestination
-from src.core import SyntheticDataWorker, DataFrameWrapper
+from src.destinations import (
+    S3Destination,
+    S3DestinationConfig,
+    FileFormat,
+    IcebergDestination,
+    IcebergDestinationConfig,
+)
+from src.core import SyntheticDataWorker
 from src.sources.avro_ocf import AvroOCFSourceConfig, AvroOCFSource
-from ...models import DTOAvroOCFRequest, DTOAvroOCFResponse
+from ...models import (
+    DTOAvroOCFRequest,
+    DTOAvroOCFResponse,
+    UploadStatus,
+    S3UploadResult,
+    IcebergUploadResult,
+)
 from ...deps import get_worker_queue, get_app_settings
 
 
@@ -25,6 +37,11 @@ async def generate_from_avro(
     worker: SyntheticDataWorker = Depends(get_worker_queue),
     settings: Settings = Depends(get_app_settings),
 ):
+    if not (settings.s3_destination or settings.hms_s3_destination):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No destinations configured for this endpoint",
+        )
 
     avro_ocf_source = AvroOCFSource(
         type="avro-ocf",
@@ -38,26 +55,62 @@ async def generate_from_avro(
         output_size=body.output_size,
         synthesizer_cls=settings.sdv_model_class,
         load_limit=body.load_limit,
-    )  # May block up to 1m if at capacity
+    )
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    s3_response = await S3Destination(config=settings.s3_destination).submit(
-        df=synthetic_df_wrap.df_clean,
-        filename=avro_ocf_source.title,
-        prefix=avro_ocf_source.namespace,
-        format=FileFormat.CSV,
+    # Base case - no destination configured
+    s3_file_upload = S3UploadResult(
+        status=UploadStatus.SKIPPED, details=None, reason="not_configured", error=None
     )
+    try:
+        if settings.s3_destination:
+            s3_config = S3DestinationConfig(
+                filename=avro_ocf_source.title,
+                prefix=avro_ocf_source.namespace,
+                format=FileFormat.CSV,
+                **settings.s3_destination.model_dump_with_secrets(mode="python")
+            )
+            s3_response = await S3Destination(type="s3", config=s3_config).submit(
+                data=synthetic_data,
+            )
+            s3_file_upload = S3UploadResult(
+                status=UploadStatus.SUCCESS,
+                details=s3_response,
+                reason=None,
+                error=None,
+            )
+    except Exception as ex:
+        s3_file_upload = S3UploadResult(
+            status=UploadStatus.FAILED, details=None, reason="upload_failed", error=ex
+        )
 
-    iceberg_response = await IcebergDestination(
-        config=settings.hms_s3_destination
-    ).submit(
-        df=synthetic_df_wrap.df_clean,
-        namespace=avro_ocf_source.namespace,
-        table_name=avro_ocf_source.title,
-        avro_schema=avro_ocf_source.avro_schema,
+    iceberg_upload = IcebergUploadResult(
+        status=UploadStatus.SKIPPED, details=None, reason="not_configured", error=None
     )
+    try:
+        if settings.hms_s3_destination:
+            iceberg_config = IcebergDestinationConfig(
+                namespace=avro_ocf_source.namespace,
+                table_name=avro_ocf_source.title,
+                **settings.hms_s3_destination.model_dump_with_secrets(mode="python")
+            )
+            iceberg_response = await IcebergDestination(
+                type="iceberg", config=iceberg_config
+            ).submit(data=synthetic_data)
+            iceberg_upload = IcebergUploadResult(
+                status=UploadStatus.SUCCESS,
+                details=iceberg_response,
+                reason=None,
+                error=None,
+            )
+    except Exception as ex:
+        iceberg_upload = IcebergUploadResult(
+            status=UploadStatus.FAILED, details=None, reason="upload_failed", error=ex
+        )
 
     return DTOAvroOCFResponse(
-        message="ok", s3_file_upload=s3_response, iceberg_upload=iceberg_response
+        message="ok",
+        s3_file_upload=s3_file_upload,
+        iceberg_upload=iceberg_upload,
     )

@@ -46,7 +46,7 @@ class SyntheticDataWorker(Singleton):
         synthesizer_cls: Type[BaseSingleTableSynthesizer],
         load_limit: Optional[int] = None,
         model_params: Optional[Dict[str, Any]] = None,
-    ) -> Future:
+    ) -> Future[Union[pd.DataFrame, pa.Table]]:
         """
         Submit a generation task. Returns a Future,
         that resolves to Union[pa.Table, pd.DataFrame] based on source.

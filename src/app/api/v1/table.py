@@ -1,9 +1,9 @@
-import json
 import asyncio
 from fastapi import Depends, APIRouter, status
-from src.core import SyntheticDataWorker, DataFrameWrapper
+import pyarrow as pa
+from src.core import SyntheticDataWorker
 from src.config import Settings
-from ...models import SyntheticRequest, SyntheticResponse
+from ...models import SyntheticRequest, SyntheticJSONResponse
 from ...deps import get_worker_queue, get_app_settings
 
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/table")
 
 @router.post(
     "/generate",
-    response_model=SyntheticResponse,
+    response_model=SyntheticJSONResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Generate synthetic dataset from custom source",
 )
@@ -28,11 +28,8 @@ async def generate_synthetic(
         load_limit=request.load_limit,
     )
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    # FIXME: heavy dataframe to json conversion
-    return json.loads(
-        synthetic_df_wrap.df_clean.to_json(
-            orient="records", date_format="iso", index=False
-        )
-    )
+    if isinstance(synthetic_data, pa.Table):
+        return synthetic_data.to_pylist()
+    return synthetic_data.to_dict()

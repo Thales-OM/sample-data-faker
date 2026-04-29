@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import pandas as pd
 import pyarrow as pa
-from pydantic import Field
-from typing import Any, Dict, Union, Optional, Literal
+from pydantic import Field, BaseModel
+from typing import Any, Dict, Union, Literal
 from src.openmetadata import SampleData
 from src.logger import LoggerFactory
 from src.openmetadata import AsyncOMDClient
@@ -20,8 +20,11 @@ class OpenMetadataDestinationResponse(BaseDestinationResponse):
 
 class OpenMetadataDestinationConfig(BaseDestinationConfig, OMDConfig):
     table_id: str = Field(description="ID of the table to attach SampleData to.")
-    omd_async_client: Optional[AsyncOMDClient] = Field(
-        None,
+
+
+class OpenMetadataDestinationConfigInternal(BaseModel):
+    table_id: str = Field(description="ID of the table to attach SampleData to.")
+    omd_async_client: AsyncOMDClient = Field(
         description="Provides an existing client instead of creating a new one. \
             For internal use. Client is not closed upon execution.",
     )
@@ -29,15 +32,15 @@ class OpenMetadataDestinationConfig(BaseDestinationConfig, OMDConfig):
 
 class OpenMetadataDestination(BaseDestination):
     type: Literal["openmetadata"]
-    config: OpenMetadataDestinationConfig
+    config: Union[OpenMetadataDestinationConfig, OpenMetadataDestinationConfigInternal]
 
     async def submit(
-        self, data: Union[pd.DataFrame, pa.Table], table_id: str, client: AsyncOMDClient
+        self, data: Union[pd.DataFrame, pa.Table]
     ) -> OpenMetadataDestinationResponse:
         if isinstance(data, pa.Table):
             data = data.to_pandas()
 
-        if self.config.omd_async_client:
+        if isinstance(self.config, OpenMetadataDestinationConfigInternal):
             return await self._submit_with_client(
                 df=data,
                 table_id=self.config.table_id,
