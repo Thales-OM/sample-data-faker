@@ -1,4 +1,4 @@
-from .settings import Settings, S3DestinationConfig, S3SourceConfig, OMDConfig, HMSS3DestinationConfig, TrinoConnectionConfig
+from .settings import Settings, S3DestinationConfig, OMDConfig, HMSS3DestinationConfig, TrinoConnectionConfig
 from .constants import (
     DEFAULT_SAMPLE_SIZE,
     DEFAULT_OUTPUT_SIZE,
@@ -11,7 +11,6 @@ __all__ = [
     "Settings",
     "OMDConfig",
     "S3DestinationConfig",
-    "S3SourceConfig",
     "HMSS3DestinationConfig",
     "TrinoConnectionConfig",
     "DEFAULT_SAMPLE_SIZE",
