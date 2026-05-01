@@ -60,7 +60,7 @@ class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     warehouse: str = Field(examples=["s3://my-bucket/warehouse/"])
     s3_access_key_id: str = Field(serialization_alias="s3.access-key-id")
     s3_secret_access_key: SecretStr = Field(
-        serialization_alias="s3.secret-access-key",
+        exclude=True, serialization_alias="s3.secret-access-key",
     )
     write_format_default: str = Field(
         "parquet",
