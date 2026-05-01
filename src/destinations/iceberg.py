@@ -43,9 +43,20 @@ class IcebergDestinationError(Exception):
         operation: Optional[str] = None,
     ):
         super().__init__(message)
+        self.message = message
         self.cause = cause
         self.table_identifier = table_identifier
         self.operation = operation  # e.g., "create_table", "load_table", "write_data"
+
+    def __str__(self) -> str:
+        return str(
+            {
+                "message": self.message,
+                "cause": self.cause,
+                "table_identifier": self.table_identifier,
+                "operation": self.operation,
+            }
+        )
 
 
 class IcebergDestinationConfig(BaseDestinationConfig, HMSS3DestinationConfig):
