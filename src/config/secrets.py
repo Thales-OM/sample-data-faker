@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Union, Literal
-import json
 from pydantic import BaseModel
 from pydantic.types import _SecretField
+from pydantic_core import to_jsonable_python
 
 
 class DumpableSecretsBaseModel(BaseModel):
@@ -49,8 +49,7 @@ class DumpableSecretsBaseModel(BaseModel):
         data = self._extract_secrets_recursive(data)
 
         if mode == "json":
-            # TODO: simplify type conversion to json types
-            data = json.loads(json.dumps(data, default=fallback))
+            data = to_jsonable_python(data, fallback=fallback)
 
         return data
 
