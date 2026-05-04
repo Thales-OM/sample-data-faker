@@ -12,11 +12,6 @@ services:
     build: 
       dockerfile: ./Dockerfile
       context: ..
-    environment:
-      - MAX_WORKERS=2
-      - MAX_PENDING=3
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-minioadmin}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-minioadmin}
     volumes:
       - .env:/etc/env/.env:ro
     expose:

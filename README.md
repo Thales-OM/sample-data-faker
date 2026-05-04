@@ -49,10 +49,25 @@ S3_DESTINATION__ENDPOINT=http://localhost:9000
 S3_DESTINATION__ACCESS_KEY=minioadmin
 S3_DESTINATION__SECRET_KEY=minioadmin
 S3_DESTINATION__REGION=us-east-1
-S3_DESTINATION__BUCKET=dto-sample-data
+S3_DESTINATION__BUCKET=dto-synthetic
+
+# Writing Iceberg tables (Hive Metastore + S3 storage)
+HMS_S3_DESTINATION__CATALOG_NAME="synthetic"
+HMS_S3_DESTINATION__TYPE="hive"
+HMS_S3_DESTINATION__URI="thrift://localhost:9083"
+HMS_S3_DESTINATION__WAREHOUSE="s3://dto-synthetic/warehouse/"
+HMS_S3_DESTINATION__S3_ACCESS_KEY_ID="minioadmin"
+HMS_S3_DESTINATION__S3_SECRET_ACCESS_KEY="minioadmin"
+HMS_S3_DESTINATION__WRITE_FORMAT_DEFAULT="parquet"
+HMS_S3_DESTINATION__S3_REGION="us-east-1"
+HMS_S3_DESTINATION__S3_ENDPOINT="http://localhost:9000"
 
 # FastAPI app args
 FASTAPI__ROOT_PATH=""
+
+# Worker settings (max concurrency and backpressure)
+MAX_THREADS=2
+MAX_PENDING=3
 ```
 
 ### Запуск через Python
@@ -97,7 +112,7 @@ make compose_up
 | `/api/v1/table/generate` | POST | Генерация синтетических данных из указанного источника |
 | `/api/v1/openmetadata/generate/{table_fqn}` | POST | Генерация данных и загрузка в OpenMetadata для указанной таблицы |
 | `/api/v1/openmetadata/webhook` | POST | Webhook для автоматической генерации данных при изменении схемы в OpenMetadata |
-| `/api/v1/dto/avro-ocf` | POST | Генерация данных из Avro OCF файла с загрузкой результата в S3 |
+| `/api/v1/dto/avro-ocf` | POST | Генерация данных из Avro OCF файла с загрузкой результата в S3 и Iceberg таблицу (Hive Metastore + S3) |
 
 ### Параметры запросов
 
@@ -113,9 +128,14 @@ make compose_up
 
 **`/api/v1/dto/avro-ocf`** принимает:
 
-- `file` — Avro OCF файл (.avro)
-- `output_size` — максимальное количество записей для генерации (1-10000)
-- `load_limit` — максимум записей для загрузки из файла (опционально)
+```json
+{ 
+  "file_content": "T2JqAQAEFGF2cm8uc2NoZW1hHnsidHlwZSI6InJlY29yZCIsIm5hbWUiOiJ0ZXN0IiwiZmllbGRzIjpbeyJuYW1lIjoiaWQiLCJ0eXBlIjoiaW50In1dfRQGYXZyby5jb2RlYwZzbmFwcHkAEPFGNVtbFhwriApCDQ4ODg4ODg4AAAEAMDAwMDAwMDAwMDAwMMA=", // Содержимое Avro OCF (.avro) файла в виде base64 строки
+  "filename": "data.avro", // Имя исходного файла, исключительно для логирования и метаданных (название итоговых таблицы / берется из схемы) (опционально)
+  "output_size": 100, // Максимальное количество записей для генерации (1-10000)
+  "load_limit": 1000// Максимум записей для загрузки из файла (опционально)
+}
+```
 
 ### Источники данных
 
