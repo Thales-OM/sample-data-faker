@@ -7,7 +7,6 @@ from sdv.single_table.base import BaseSingleTableSynthesizer
 from src.core.flatten import DataFrameFlattener
 from src.logger import LoggerFactory
 
-
 logger = LoggerFactory.getLogger(__name__)
 
 
@@ -201,7 +200,9 @@ class SDVPipeline:
                     result_arrays.append(pa.array(values, type=inferred_type))
                 except Exception as e:
                     # Fallback: convert to string
-                    str_vals = [str(v) if pd.notna(v) else None for v in df[col_name].tolist()]
+                    str_vals = [
+                        str(v) if pd.notna(v) else None for v in df[col_name].tolist()
+                    ]
                     inferred_type = pa.string()
                     result_arrays.append(pa.array(str_vals, type=inferred_type))
             else:
@@ -311,9 +312,9 @@ class SDVPipeline:
             Tuple[Union[pa.Table, pd.DataFrame], Metadata]: Tuple of (generated nested data, SDV metadata)
         """
         pipeline = cls(synthesizer_cls=synthesizer_cls, model_params=model_params)
-        logger.info(f"Table from Avro schema:\n{data.schema}")
+
         flat_data = pipeline.flatten(data)
-        logger.info(f"Flat table schema:\n{flat_data.schema}")
+
         pipeline.fit(flat_data)
         gen_flat = pipeline.sample(num_rows)
 

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import pandas as pd
 import pyarrow as pa
 from pydantic import Field, PrivateAttr
-from pyiceberg.io.pyarrow import pyarrow_to_schema, schema_to_pyarrow
 from pyiceberg.catalog import Catalog, load_catalog
 from pyiceberg.table import Table
 from pyiceberg.exceptions import (
@@ -15,9 +14,7 @@ from pyiceberg.exceptions import (
 from pyiceberg.schema import Schema
 from src.config import HMSS3DestinationConfig
 from src.logger import LoggerFactory
-from ..base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
-from .helpers import ArrowSchemaFieldIdAssigner
-
+from .base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
 
 logger = LoggerFactory.getLogger(__name__)
 
@@ -194,22 +191,6 @@ class IcebergDestination(BaseDestination):
             if isinstance(data, pd.DataFrame):
                 data = pa.Table.from_pandas(data, preserve_index=False)
 
-            # Assign IDs if missing, ValueError from PyIceberg otherwise
-            idd_arrow_schema = ArrowSchemaFieldIdAssigner(
-                catalog=self.catalog
-            ).assign_field_ids(
-                schema=data.schema,
-                table_identifier=table_identifier,
-                preserve_existing_ids=True,
-                enrich_from_catalog=True,
-            )
-            # data = data.cast(idd_arrow_schema, safe=False)
-            # logger.info(f"PyArrow schema:\n{data.schema}")
-            # TODO: parametrize format_version / add to config 
-            # iceberg_schema = pyarrow_to_schema(idd_arrow_schema)
-            # logger.info(f"PyIceberg schema:\n{iceberg_schema}")
-            # new_arrow_schema = schema_to_pyarrow(iceberg_schema)
-            # data = data.cast(new_arrow_schema, safe=False)
             namespace = table_identifier.split(".")[0]
             try:
                 self.catalog.create_namespace(namespace=namespace)
@@ -262,7 +243,7 @@ class IcebergDestination(BaseDestination):
                     cause=e,
                     table_identifier=table_identifier,
                     operation="write_data",
-                ) from e                    
+                ) from e
             except Exception as e:
                 if created_new_table:
                     self.catalog.drop_table(table_identifier)
