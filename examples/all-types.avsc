@@ -1,0 +1,53 @@
+{
+  "name": "examples.all_types",
+  "type": "record",
+  "fields": [
+    { "name": "int8_field", "type": "int" },
+    { "name": "int16_field", "type": ["null", "int"], "default": null },
+    { "name": "int32_field", "type": ["null", "int"], "default": null },
+    { "name": "int64_field", "type": ["null", "long"], "default": null },
+    { "name": "uint8_field", "type": ["null", "int"], "default": null },
+    { "name": "uint16_field", "type": ["null", "int"], "default": null },
+    { "name": "uint32_field", "type": ["null", "long"], "default": null },
+    {
+      "name": "uint64_field",
+      "type": ["null", "string"],
+      "default": null,
+      "format": "uint64"
+    },
+    { "name": "float_field", "type": ["null", "float"], "default": null },
+    { "name": "double_field", "type": ["null", "double"], "default": null },
+    {
+      "name": "decimal_field",
+      "type": [
+        "null",
+        {
+          "type": "bytes",
+          "logicalType": "decimal",
+          "precision": 8,
+          "scale": 2
+        }
+      ],
+      "default": null
+    },
+    { "name": "boolean_field", "type": ["null", "boolean"], "default": null },
+    {
+      "name": "iso8601_field",
+      "type": ["null", "string"],
+      "default": null,
+      "format": "ISO8601"
+    },
+    {
+      "name": "rfc3339nano_field",
+      "type": ["null", "string"],
+      "default": null,
+      "format": "RFC3339Nano"
+    },
+    { "name": "string_field", "type": "string" },
+    {
+      "name": "array_field",
+      "type": ["null", { "type": "array", "items": "int" }],
+      "default": null
+    }
+  ]
+}
