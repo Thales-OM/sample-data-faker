@@ -17,6 +17,7 @@ from ...models import (
     UploadStatus,
     S3UploadResult,
     IcebergUploadResult,
+    BaseFastAPIErrorResponse,
 )
 from ...deps import get_worker_queue, get_app_settings
 
@@ -31,6 +32,16 @@ router = APIRouter(prefix="/dto")
     "/avro-ocf",
     response_model=DTOAvroOCFResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": BaseFastAPIErrorResponse,
+            "description": "Error occurred during pipeline or both destination uploads",
+        }
+    },
+    summary="Generate and load synthetic dataset to S3 + Iceberg",
+    description="Accept Apache Avro payload and upload generated "
+    "dataset to preconfigured S3 bucket and Iceberg (HMS+S3) destinations.\n"
+    "Single destination failure still responds with 200 OK. See individual statuses for info.",
 )
 async def generate_from_avro(
     body: DTOAvroOCFRequest,
@@ -40,7 +51,7 @@ async def generate_from_avro(
     if not (settings.s3_destination or settings.hms_s3_destination):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No destinations configured for this endpoint",
+            detail="No destinations configured for this endpoint.",
         )
 
     avro_ocf_source = AvroOCFSource(
@@ -81,6 +92,7 @@ async def generate_from_avro(
                 error=None,
             )
     except Exception as ex:
+        logger.error(f"S3 upload failed: {ex}")
         s3_file_upload = S3UploadResult(
             status=UploadStatus.FAILED, details=None, reason="upload_failed", error=ex
         )
@@ -93,7 +105,7 @@ async def generate_from_avro(
             iceberg_config = IcebergDestinationConfig(
                 namespace=avro_ocf_source.namespace,
                 table_name=avro_ocf_source.title,
-                **settings.hms_s3_destination.model_dump_with_secrets(mode="python")
+                **settings.hms_s3_destination.model_dump_with_secrets(mode="python"),
             )
             iceberg_response = await IcebergDestination(
                 type="iceberg", config=iceberg_config
@@ -105,12 +117,28 @@ async def generate_from_avro(
                 error=None,
             )
     except Exception as ex:
+        logger.error(f"Iceberg upload failed: {ex}")
         iceberg_upload = IcebergUploadResult(
             status=UploadStatus.FAILED, details=None, reason="upload_failed", error=ex
         )
 
+    if (
+        s3_file_upload.status == UploadStatus.FAILED
+        and iceberg_upload.status == UploadStatus.FAILED
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Both upload destinations failed.",
+        )
+
+    message = (
+        "partial_success"
+        if s3_file_upload.status == UploadStatus.FAILED
+        or iceberg_upload.status == UploadStatus.FAILED
+        else "ok"
+    )
     return DTOAvroOCFResponse(
-        message="ok",
+        message=message,
         s3_file_upload=s3_file_upload,
         iceberg_upload=iceberg_upload,
     )

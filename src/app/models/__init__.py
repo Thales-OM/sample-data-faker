@@ -10,6 +10,7 @@ from .response import (
     S3UploadResult,
     IcebergUploadResult,
     VersionResponse,
+    BaseFastAPIErrorResponse,
 )
 
 
@@ -26,4 +27,5 @@ __all__ = [
     "S3UploadResult",
     "IcebergUploadResult",
     "VersionResponse",
+    "BaseFastAPIErrorResponse",
 ]

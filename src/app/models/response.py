@@ -31,14 +31,6 @@ class VersionResponse(BaseModel):
     version: str = "unknown"
 
 
-class S3FileUpload(BaseModel, S3DestinationResponse):
-    pass
-
-
-class IcebergUpload(BaseModel, IcebergDestinationResponse):
-    pass
-
-
 class UploadStatus(StrEnum):
     SUCCESS = "success"
     SKIPPED = "skipped"
@@ -58,14 +50,18 @@ class BaseUploadResult(BaseModel):
 
 
 class S3UploadResult(BaseUploadResult):
-    details: Optional[S3FileUpload] = None
+    details: Optional[S3DestinationResponse] = None
 
 
 class IcebergUploadResult(BaseUploadResult):
-    details: Optional[IcebergUpload] = None
+    details: Optional[IcebergDestinationResponse] = None
 
 
 class DTOAvroOCFResponse(BaseModel):
     message: str = "ok"
-    s3_file_upload: S3UploadResult
-    iceberg_upload: IcebergUploadResult
+    s3_file_upload: Optional[S3UploadResult] = None
+    iceberg_upload: Optional[IcebergUploadResult] = None
+
+
+class BaseFastAPIErrorResponse(BaseModel):
+    detail: Optional[str] = None
