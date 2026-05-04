@@ -267,6 +267,7 @@ class DataFrameFlattener:
                             str(v) if v is not None else None for v in values
                         ]
                         arrays.append(pa.chunked_array([safe_values], type=pa.string()))
+
         flat_table = pa.Table.from_arrays(arrays, names=col_names)
         self._array_metadata = self._extract_array_metadata(flat_table=flat_table)
         return flat_table
@@ -427,13 +428,22 @@ class DataFrameFlattener:
 
         result = {}
         for col_name, col_schema in self._schema.items():
+            root_dtype = col_schema.root_node.dtype
+            
             if col_schema.root_node.node_type == NodeType.SCALAR:
-                result[col_name] = flat_table.column(col_name)
+                if col_name in flat_table.column_names:
+                    result[col_name] = flat_table.column(col_name)
+                elif root_dtype == "null":
+                    null_arr = pa.array([None] * flat_table.num_rows, type=pa.null())
+                    result[col_name] = pa.chunked_array([null_arr])
+                else:
+                    result[col_name] = flat_table.column(col_name)
             else:
                 result[col_name] = self._unflatten_column_arrow(flat_table, col_schema)
 
         self._input_is_pyarrow = True
-        return pa.Table.from_pydict(result)
+        table = pa.Table.from_pydict(result)
+        return table
 
     def _unflatten_pandas(self, flat_df: pd.DataFrame) -> pd.DataFrame:
         self._input_is_pyarrow = False
@@ -485,6 +495,12 @@ class DataFrameFlattener:
             values = self._list_array_to_list(col)
             root_node = self._infer_schema_from_values_arrow(values, col_type)
             return ColumnSchema(name=col_name, root_node=root_node)
+
+        if pa.types.is_null(col_type):
+            return ColumnSchema(
+                name=col_name,
+                root_node=SchemaNode(node_type=NodeType.SCALAR, dtype="null"),
+            )
 
         non_null = col.filter(pc.not_equal(col, None)).to_pylist()
         non_null = [v for v in non_null if v is not None]
@@ -712,7 +728,41 @@ class DataFrameFlattener:
         return flat_table.column(col_name)
 
     def _build_struct_fields(self, schema_node: SchemaNode) -> List[pa.Field]:
-        return []
+        """Build PyArrow struct fields from SchemaNode children."""
+        if schema_node.node_type != NodeType.DICT:
+            return []
+        fields = []
+        for key, child_schema in schema_node.children.items():
+            field_type = self._schema_node_to_pyarrow_type(child_schema)
+            fields.append(pa.field(key, field_type, nullable=True))
+        return fields
+
+    def _schema_node_to_pyarrow_type(self, schema_node: SchemaNode) -> pa.DataType:
+        """Convert a SchemaNode to PyArrow type."""
+        if schema_node.node_type == NodeType.SCALAR:
+            dtype = schema_node.dtype
+            if dtype == "int64":
+                return pa.int64()
+            elif dtype == "float64":
+                return pa.float64()
+            elif dtype == "bool":
+                return pa.bool()
+            elif dtype == "object":
+                return pa.string()
+            elif dtype == "null":
+                return pa.null()
+            else:
+                return pa.string()
+        elif schema_node.node_type == NodeType.DICT:
+            child_fields = []
+            for key, child_schema in schema_node.children.items():
+                child_type = self._schema_node_to_pyarrow_type(child_schema)
+                child_fields.append(pa.field(key, child_type, nullable=True))
+            return pa.struct(child_fields)
+        elif schema_node.node_type == NodeType.ARRAY:
+            element_type = self._schema_node_to_pyarrow_type(schema_node.element_schema) if schema_node.element_schema else pa.string()
+            return pa.list_(element_type)
+        return pa.string()
 
     def _unflatten_dict_column_arrow(
         self, flat_table: pa.Table, col_schema: ColumnSchema, schema_node: SchemaNode
@@ -729,12 +779,10 @@ class DataFrameFlattener:
             for i, val in enumerate(child_values):
                 result_dicts[i][key] = val
 
-        struct_fields = self._build_struct_fields(schema_node)
-        if struct_fields:
-            struct_type = pa.struct(struct_fields)
-            result_array = pa.array(result_dicts, type=struct_type)
-        else:
+        try:
             result_array = pa.array(result_dicts)
+        except pa.ArrowInvalid:
+            result_array = pa.array(result_dicts, type=pa.string())
         return pa.chunked_array([result_array])
 
     def _infer_schema_from_values(self, values: List[Any]) -> SchemaNode:

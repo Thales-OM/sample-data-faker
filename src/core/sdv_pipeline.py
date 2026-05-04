@@ -49,6 +49,7 @@ class SDVPipeline:
         self._flattener = DataFrameFlattener()
         self._metadata: Optional[Metadata] = None
         self._input_type: Optional[PipelineInputType] = None
+        self._pyarrow_schema: Optional[pa.Schema] = None
 
     @property
     def synthesizer(self) -> BaseSingleTableSynthesizer:
@@ -105,6 +106,7 @@ class SDVPipeline:
         """
         if isinstance(data, pa.Table):
             self._input_type = PipelineInputType.PYARROW
+            self._pyarrow_schema = data.schema
             df = data.to_pandas()
         elif isinstance(data, pd.DataFrame):
             self._input_type = PipelineInputType.PANDAS
@@ -148,8 +150,67 @@ class SDVPipeline:
             adjusted_df = self._normalize_array_lengths(
                 data=synth_df, target_rows=synth_df.shape[0]
             )
-            return pa.Table.from_pandas(adjusted_df)
+            return self._dataframe_to_pyarrow_table(adjusted_df, self._pyarrow_schema)
         return synth_df
+
+    def _dataframe_to_pyarrow_table(
+        self,
+        df: pd.DataFrame,
+        schema: Optional[pa.Schema] = None,
+    ) -> pa.Table:
+        """
+        Convert a pandas DataFrame to PyArrow Table, properly handling null columns.
+
+        Args:
+            df: Input DataFrame
+            schema: Optional schema to use for column types
+
+        Returns:
+            PyArrow Table
+        """
+        if schema is None:
+            return pa.Table.from_pandas(df)
+
+        result_arrays = []
+        result_fields = []
+
+        for field in schema:
+            col_name = field.name
+            expected_type = field.type
+
+            if col_name in df.columns:
+                # Use inferred type from pandas if conversion fails
+                inferred_type = expected_type
+                try:
+                    values = df[col_name].values
+                    is_all_null = df[col_name].isna().all()
+                    is_any_null = df[col_name].isna().any()
+
+                    if pa.types.is_null(expected_type):
+                        if is_all_null or is_any_null:
+                            inferred_type = pa.float64()
+                    elif is_all_null:
+                        if pa.types.is_decimal(expected_type):
+                            inferred_type = pa.float64()
+                    elif is_any_null:
+                        if pa.types.is_decimal(expected_type):
+                            inferred_type = pa.float64()
+                        elif pa.types.is_integer(expected_type):
+                            inferred_type = pa.float64()
+
+                    result_arrays.append(pa.array(values, type=inferred_type))
+                except Exception as e:
+                    # Fallback: convert to string
+                    str_vals = [str(v) if pd.notna(v) else None for v in df[col_name].tolist()]
+                    inferred_type = pa.string()
+                    result_arrays.append(pa.array(str_vals, type=inferred_type))
+            else:
+                result_arrays.append(pa.array([None] * len(df), type=expected_type))
+                inferred_type = expected_type
+
+            result_fields.append(pa.field(col_name, inferred_type))
+
+        return pa.Table.from_arrays(result_arrays, schema=pa.schema(result_fields))
 
     @staticmethod
     def _normalize_array_lengths(
@@ -250,8 +311,9 @@ class SDVPipeline:
             Tuple[Union[pa.Table, pd.DataFrame], Metadata]: Tuple of (generated nested data, SDV metadata)
         """
         pipeline = cls(synthesizer_cls=synthesizer_cls, model_params=model_params)
+        logger.info(f"Table from Avro schema:\n{data.schema}")
         flat_data = pipeline.flatten(data)
-
+        logger.info(f"Flat table schema:\n{flat_data.schema}")
         pipeline.fit(flat_data)
         gen_flat = pipeline.sample(num_rows)
 

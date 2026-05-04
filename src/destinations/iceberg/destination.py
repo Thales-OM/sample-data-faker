@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pandas as pd
 import pyarrow as pa
 from pydantic import Field, PrivateAttr
-from pyiceberg.io.pyarrow import pyarrow_to_schema
+from pyiceberg.io.pyarrow import pyarrow_to_schema, schema_to_pyarrow
 from pyiceberg.catalog import Catalog, load_catalog
 from pyiceberg.table import Table
 from pyiceberg.exceptions import (
@@ -203,11 +203,13 @@ class IcebergDestination(BaseDestination):
                 preserve_existing_ids=True,
                 enrich_from_catalog=True,
             )
-            data = data.cast(idd_arrow_schema, safe=False)
-            logger.info(f"PyArrow schema:\n{data.schema}")
+            # data = data.cast(idd_arrow_schema, safe=False)
+            # logger.info(f"PyArrow schema:\n{data.schema}")
             # TODO: parametrize format_version / add to config 
-            iceberg_schema = pyarrow_to_schema(data.schema, format_version=3)
-            logger.info(f"PyIceberg schema:\n{iceberg_schema}")
+            # iceberg_schema = pyarrow_to_schema(idd_arrow_schema)
+            # logger.info(f"PyIceberg schema:\n{iceberg_schema}")
+            # new_arrow_schema = schema_to_pyarrow(iceberg_schema)
+            # data = data.cast(new_arrow_schema, safe=False)
             namespace = table_identifier.split(".")[0]
             try:
                 self.catalog.create_namespace(namespace=namespace)
@@ -225,7 +227,7 @@ class IcebergDestination(BaseDestination):
                 )
                 table = self._create_new_table(
                     table_identifier=table_identifier,
-                    iceberg_schema=iceberg_schema,
+                    iceberg_schema=data.schema,
                 )
                 created_new_table = True
 
@@ -238,7 +240,7 @@ class IcebergDestination(BaseDestination):
                         # Note: .update_schema() skips metadata update if schemas are identical
                         txn.update_schema(
                             allow_incompatible_changes=False, case_sensitive=True
-                        ).union_by_name(new_schema=iceberg_schema)
+                        ).union_by_name(new_schema=data.schema, format_version=3)
 
                     # Append for new tables, overwrite for existing
                     if created_new_table:
@@ -252,13 +254,19 @@ class IcebergDestination(BaseDestination):
                             f"Overwrote table {table_identifier} with {data.num_rows} rows"
                         )
             except CommitFailedException as e:
+                if created_new_table:
+                    self.catalog.drop_table(table_identifier)
+                    logger.info(f"Deleted created table: {table_identifier}")
                 raise IcebergDestinationError(
                     message=f"Commit failed for table {table_identifier}",
                     cause=e,
                     table_identifier=table_identifier,
                     operation="write_data",
-                ) from e
+                ) from e                    
             except Exception as e:
+                if created_new_table:
+                    self.catalog.drop_table(table_identifier)
+                    logger.info(f"Deleted created table: {table_identifier}")
                 raise IcebergDestinationError(
                     message=f"Failed to write data to table {table_identifier}",
                     cause=e,

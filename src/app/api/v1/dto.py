@@ -80,7 +80,7 @@ async def generate_from_avro(
                 filename=avro_ocf_source.title,
                 prefix=avro_ocf_source.namespace,
                 format=FileFormat.CSV,
-                **settings.s3_destination.model_dump_with_secrets(mode="python")
+                **settings.s3_destination.model_dump_with_secrets(mode="python"),
             )
             s3_response = await S3Destination(type="s3", config=s3_config).submit(
                 data=synthetic_data,
