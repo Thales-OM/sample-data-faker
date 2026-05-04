@@ -28,13 +28,21 @@ services:
       retries: 2
 
   trino:
-    image: trinodb/trino:latest
+    image: trinodb/trino:436
     ports:
       - "8080:8080"
     volumes:
-      - ./provisioning/trino/etc/catalog:/etc/trino/catalog
+      - ./provisioning/trino/etc:/etc/trino:ro
+    environment:
+      - TZ=UTC
     depends_on:
       - hive-metastore
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   hive-metastore:
     image: 'prestodb/hive3.1-hive:5'
