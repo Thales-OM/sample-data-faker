@@ -18,7 +18,7 @@ class TrinoConnectionConfig(BaseSettings):
     host: str
     port: int = 443
     user: str
-    password: Optional[SecretStr] = None
+    password: Optional[SecretStr] = Field(None, repr=False)
     catalog: str = "dto_iceberg"
 
 
@@ -27,7 +27,7 @@ class OMDConfig(BaseSettings):
         ..., description="Base URL of OpenMetadata server, e.g. https://om.example.com"
     )
     token: SecretStr = Field(
-        ..., min_length=10, description="Bearer token for authentication"
+        ..., min_length=10, repr=False, description="Bearer token for authentication"
     )
     api_version: str = Field(
         "v1", pattern=r"^v\d+$", description="API version (e.g., 'v1')"
@@ -48,7 +48,7 @@ class S3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
         None, description="Custom S3 endpoint (for minio, etc.)"
     )
     access_key: str
-    secret_key: SecretStr = Field(exclude=True)
+    secret_key: SecretStr = Field(repr=False)
     region: str = Field("us-east-1", description="AWS region (e.g., us-east-1)")
     bucket: str
 
@@ -60,7 +60,7 @@ class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     warehouse: str = Field(examples=["s3://my-bucket/warehouse/"])
     s3_access_key_id: str = Field(serialization_alias="s3.access-key-id")
     s3_secret_access_key: SecretStr = Field(
-        exclude=True, serialization_alias="s3.secret-access-key",
+        repr=False, serialization_alias="s3.secret-access-key",
     )
     write_format_default: str = Field(
         "parquet",
