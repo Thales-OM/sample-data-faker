@@ -15,7 +15,8 @@ from pyiceberg.exceptions import (
 from pyiceberg.schema import Schema
 from src.config import HMSS3DestinationConfig
 from src.logger import LoggerFactory
-from .base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
+from ..base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
+from .helpers import ArrowSchemaFieldIdAssigner
 
 
 logger = LoggerFactory.getLogger(__name__)
@@ -193,8 +194,20 @@ class IcebergDestination(BaseDestination):
             if isinstance(data, pd.DataFrame):
                 data = pa.Table.from_pandas(data, preserve_index=False)
 
-            iceberg_schema = pyarrow_to_schema(data.schema)
-
+            # Assign IDs if missing, ValueError from PyIceberg otherwise
+            idd_arrow_schema = ArrowSchemaFieldIdAssigner(
+                catalog=self.catalog
+            ).assign_field_ids(
+                schema=data.schema,
+                table_identifier=table_identifier,
+                preserve_existing_ids=True,
+                enrich_from_catalog=True,
+            )
+            data = data.cast(idd_arrow_schema, safe=False)
+            logger.info(f"PyArrow schema:\n{data.schema}")
+            # TODO: parametrize format_version / add to config 
+            iceberg_schema = pyarrow_to_schema(data.schema, format_version=3)
+            logger.info(f"PyIceberg schema:\n{iceberg_schema}")
             namespace = table_identifier.split(".")[0]
             try:
                 self.catalog.create_namespace(namespace=namespace)

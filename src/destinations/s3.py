@@ -137,7 +137,7 @@ class S3Destination(BaseDestination):
                 Body=data,
                 ContentType=content_type,
                 Metadata={
-                    "original-filename": f"{self.config.filename}.{self.config.format.extension}"
+                    "original-filename": f"{self.config.filename}{self.config.format.extension}"
                 },
             )
 
@@ -162,7 +162,7 @@ class S3Destination(BaseDestination):
         if file_path.suffix:
             final_path = file_path.with_suffix(format.extension)
         else:
-            final_path = f"{file_path.name}.{format.extension}"
+            final_path = f"{file_path.name}{format.extension}"
 
         return str(final_path)
 
