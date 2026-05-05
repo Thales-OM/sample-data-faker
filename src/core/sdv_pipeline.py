@@ -15,7 +15,7 @@ class PipelineInputType(StrEnum):
     PYARROW = "pyarrow"
 
 
-# TODO: Could be helpful to hint Generic[T] for .fit()/.sample() type connection, but may confuse pylance
+# NOTE: Could be helpful to hint Generic[T] for .fit()/.sample() type connection, but may confuse pylance
 class SDVPipeline:
     """
     Complete pipeline for generating synthetic data using SDV.
@@ -59,7 +59,9 @@ class SDVPipeline:
     @property
     def metadata(self) -> Metadata:
         if not self._metadata:
-            raise RuntimeError("Call .fit() before accessing .metadata property")
+            raise RuntimeError(
+                "Call .fit() or .create_metadata() before accessing .metadata property"
+            )
         return self._metadata
 
     @overload
@@ -86,6 +88,10 @@ class SDVPipeline:
         if isinstance(data, (pa.Table, pd.DataFrame)):
             return self._flattener.flatten(data=data)
         raise TypeError(f"Expected pa.Table or pd.DataFrame, got {type(data)}")
+
+    def create_metadata(self, df: pd.DataFrame) -> Metadata:
+        self._metadata = Metadata().detect_from_dataframe(df)
+        return self._metadata
 
     def fit(
         self,
