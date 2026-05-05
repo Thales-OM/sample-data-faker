@@ -1,45 +1,15 @@
-"""
-FastAPI exception handlers for synthetic worker errors.
-Maps API-agnostic WorkerError subclasses to HTTP responses.
-"""
-
 from fastapi import Request, status, FastAPI
 from fastapi.responses import JSONResponse
-from src.core.exceptions import WorkerError, WorkerCapacityError, GenerationError
+from src.core.exceptions import (
+    WorkerError,
+    WorkerCapacityError,
+    GenerationError,
+)
 from src.logger import LoggerFactory
+from .base import ErrorDetail
+
 
 logger = LoggerFactory.getLogger(__name__)
-
-
-class ErrorDetail:
-    """Typed error detail for JSON responses"""
-
-    def __init__(
-        self,
-        error_type: str,
-        message: str,
-        status_code: int,
-        details: dict | None = None,
-    ):
-        self.error_type = error_type
-        self.message = message
-        self.status_code = status_code
-        self.details = details or {}
-
-    def to_dict(self) -> dict:
-        """Convert to JSON-serializable dict"""
-        result = {
-            "error": self.error_type,
-            "message": self.message,
-        }
-        if self.details:
-            result["details"] = self.details
-        return result
-
-    def to_headers(self) -> dict[str, str]:
-        """Convert to HTTP headers"""
-        headers = {}
-        return headers
 
 
 async def worker_capacity_handler(
@@ -104,11 +74,7 @@ async def generation_error_handler(
         extra={
             "path": request.url.path,
             "method": request.method,
-            "error_type": (
-                type(exc.cause).__name__
-                if exc.cause
-                else "Unknown"
-            ),
+            "error_type": (type(exc.cause).__name__ if exc.cause else "Unknown"),
         },
     )
 

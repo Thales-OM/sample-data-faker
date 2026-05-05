@@ -13,7 +13,7 @@ class DummySourceConfig(DataSourceConfig):
 
 @register_source
 class DummySource(DataSource):
-    type: Literal["dummy"] = "dummy"
+    type: Literal["dummy"]
     config: DummySourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:

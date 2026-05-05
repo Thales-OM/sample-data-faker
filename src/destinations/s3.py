@@ -1,14 +1,16 @@
-from typing import Optional
+from typing import Optional, Union, Literal
 from dataclasses import dataclass
 import pandas as pd
+import pyarrow as pa
+from pydantic import Field
 from io import BytesIO
 from pathlib import Path
 from enum import StrEnum
 from aiobotocore.session import get_session
 from botocore.config import Config
-from src.config import S3DestinationConfig
+from src.config import S3DestinationConfig as SettingsS3DestinationConfig
 from src.logger import LoggerFactory
-from .base import BaseDestination, BaseDestinationResponse
+from .base import BaseDestination, BaseDestinationResponse, BaseDestinationConfig
 
 
 logger = LoggerFactory.getLogger(__name__)
@@ -55,43 +57,59 @@ class FileFormat(StrEnum):
 
 @dataclass
 class S3DestinationResponse(BaseDestinationResponse):
-    s3_key: str
+    s3_path: str = Field(
+        description="Final path to uploaded file",
+        examples=["s3://bucket-name/folder/filename.ext"],
+    )
+
+
+class S3DestinationConfig(BaseDestinationConfig, SettingsS3DestinationConfig):
+    filename: str = Field(
+        description="Base filename to write to, without extension", examples=["simple"]
+    )
+    prefix: Optional[str] = Field(
+        None, description="S3 path prefix", examples=["data/examples"]
+    )
+    format: FileFormat = Field(
+        FileFormat.CSV, description="File format to convert data", examples=["csv"]
+    )
 
 
 class S3Destination(BaseDestination):
-    def __init__(self, config: S3DestinationConfig):
-        self._config = config
+    type: Literal["s3"]
+    config: S3DestinationConfig
 
     async def submit(
         self,
-        df: pd.DataFrame,
-        filename: str,
-        prefix: Optional[str] = None,
-        format: FileFormat = FileFormat.CSV,
+        data: Union[pd.DataFrame, pa.Table],
     ) -> S3DestinationResponse:
         """
         Asynchronously upload file to S3/MinIO bucket under domain-named prefix.
 
         Args:
-            df (pd.DataFrame): tabular data to upload
-            filename (str): file name (without extension)
-            prefix (Optional[str], optional): S3 path prefix. Defaults to None.
-            format (FileFormat, optional): file format to save in. Defaults to "csv".
+            data (Union[pd.DataFrame, pa.Table]): Tabular data to upload.
 
         Returns:
-            str: Path to the saved file in the given bucket
+            S3DestinationResponse: Path to the saved file in the given bucket
         """
-        s3_key = self._get_s3_key(filename=filename, prefix=prefix, format=format)
-        content_type = format.mime_type
+        if isinstance(data, pa.Table):
+            data = data.to_pandas()
+
+        s3_key = self._get_s3_key(
+            filename=self.config.filename,
+            prefix=self.config.prefix,
+            format=self.config.format,
+        )
+        content_type = self.config.format.mime_type
 
         # Configure client
         session = get_session()
-        bucket_name = self._config.bucket
+        bucket_name = self.config.bucket
         client_kwargs = {
-            "endpoint_url": str(self._config.endpoint),
-            "aws_access_key_id": self._config.access_key,
-            "aws_secret_access_key": self._config.secret_key.get_secret_value(),
-            "region_name": self._config.region,
+            "endpoint_url": str(self.config.endpoint),
+            "aws_access_key_id": self.config.access_key,
+            "aws_secret_access_key": self.config.secret_key.get_secret_value(),
+            "region_name": self.config.region,
             "config": Config(s3={"addressing_style": "path"}),
         }
 
@@ -111,18 +129,21 @@ class S3Destination(BaseDestination):
                     raise
 
             # Create file when bucket in ensured
-            data = self._produce_file_bytes(df=df, format=format)
+            data = self._produce_file_bytes(df=data, format=self.config.format)
 
             await s3_client.put_object(
                 Bucket=bucket_name,
                 Key=s3_key,
                 Body=data,
                 ContentType=content_type,
-                Metadata={"original-filename": filename},
+                Metadata={
+                    "original-filename": f"{self.config.filename}{self.config.format.extension}"
+                },
             )
 
-            logger.info(f"Uploaded to s3://{bucket_name}/{s3_key}")
-            return S3DestinationResponse(s3_key=s3_key)
+            s3_path = f"s3://{bucket_name}/{s3_key}"
+            logger.info(f"Uploaded to {s3_path}")
+            return S3DestinationResponse(s3_path=s3_path)
 
     def _get_s3_key(
         self, filename: str, prefix: Optional[str], format: FileFormat
@@ -131,9 +152,6 @@ class S3Destination(BaseDestination):
         s3_key = filename_with_ext
         if prefix:
             s3_key = f"{prefix}/{s3_key}"
-        # Specifically configured key overrides prefix/filename
-        if self._config.key:
-            s3_key = self._config.key
         return s3_key
 
     @staticmethod

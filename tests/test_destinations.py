@@ -1,15 +1,15 @@
 """
 Tests for destinations: OpenMetadata client and S3 writer.
 """
+
 import pytest
 import responses
 import pandas as pd
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from src.destinations.openmetadata import AsyncOMDClient
 from src.destinations.s3 import S3Destination
 from src.config import OMDConfig, S3DestinationConfig
-from src.models import SampleData
+from src.openmetadata import SampleData
 
 
 @pytest.mark.unit
@@ -24,7 +24,7 @@ class TestAsyncOMDClient:
             "api_version": "v1",
         }
         client = AsyncOMDClient(config=config)
-        
+
         assert client.config.api_url is not None
         assert client._base_url == "https://om.example.com/api/v1"
 
@@ -35,7 +35,7 @@ class TestAsyncOMDClient:
             token="test-token-12345",
         )
         client = AsyncOMDClient(config=config)
-        
+
         assert client.config == config
 
     @pytest.mark.asyncio
@@ -45,7 +45,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
@@ -53,7 +53,7 @@ class TestAsyncOMDClient:
                 json={"tables": []},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.get("/tables")
                 assert result == {"tables": []}
@@ -65,14 +65,14 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
                 "https://om.example.com/api/v1/tables/nonexistent",
                 status=404,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.get("/tables/nonexistent", nullable=True)
                 assert result is None
@@ -84,7 +84,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
@@ -92,7 +92,7 @@ class TestAsyncOMDClient:
                 json={"id": "test-id", "fullyQualifiedName": "test.table"},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.get_table_by_name("test.table")
                 assert result["id"] == "test-id"
@@ -104,7 +104,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
@@ -112,7 +112,7 @@ class TestAsyncOMDClient:
                 json={"id": "test-id", "name": "test"},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.get_table_by_id("test-id")
                 assert result["id"] == "test-id"
@@ -124,7 +124,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.POST,
@@ -132,7 +132,7 @@ class TestAsyncOMDClient:
                 json={"id": "new-id"},
                 status=201,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.post("/tables", json={"name": "test"})
                 assert result["id"] == "new-id"
@@ -144,7 +144,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.PUT,
@@ -152,7 +152,7 @@ class TestAsyncOMDClient:
                 json={"id": "test-id", "updated": True},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.put("/tables/test-id", json={"name": "updated"})
                 assert result["updated"] is True
@@ -164,9 +164,9 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         sample_data = SampleData.from_dataframe(df=sample_dataframe)
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.PUT,
@@ -174,7 +174,7 @@ class TestAsyncOMDClient:
                 json={"message": "Sample data added"},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.add_sample_data(id="test-id", body=sample_data)
                 assert "message" in result
@@ -186,14 +186,14 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.DELETE,
                 "https://om.example.com/api/v1/tables/test-id",
                 status=204,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 result = await client.delete("/tables/test-id")
                 assert result is True
@@ -205,7 +205,7 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
@@ -213,7 +213,7 @@ class TestAsyncOMDClient:
                 json={"tables": []},
                 status=200,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 healthy, error = await client.is_healthy()
                 assert healthy is True
@@ -226,14 +226,14 @@ class TestAsyncOMDClient:
             api_url="https://om.example.com",
             token="test-token-12345",
         )
-        
+
         with responses.RequestsMock() as rsps:
             rsps.add(
                 responses.GET,
                 "https://om.example.com/api/v1/tables",
                 status=500,
             )
-            
+
             async with AsyncOMDClient(config=config) as client:
                 healthy, error = await client.is_healthy()
                 assert healthy is False
@@ -246,7 +246,7 @@ class TestAsyncOMDClient:
             token="test-token-12345",
         )
         client = AsyncOMDClient(config=config)
-        
+
         assert client._build_url("/tables") == "https://om.example.com/api/v1/tables"
         assert client._build_url("tables") == "https://om.example.com/api/v1/tables"
         assert client._build_url("/tables/") == "https://om.example.com/api/v1/tables/"
@@ -259,29 +259,31 @@ class TestSampleData:
     def test_from_dataframe(self, sample_dataframe: pd.DataFrame):
         """Test creating SampleData from DataFrame."""
         sample_data = SampleData.from_dataframe(df=sample_dataframe)
-        
+
         assert sample_data.tableData is not None
         assert len(sample_data.tableData) == len(sample_dataframe)
 
     def test_from_dataframe_with_nulls(self):
         """Test creating SampleData from DataFrame with null values."""
-        df = pd.DataFrame({
-            "id": [1, 2, None],
-            "name": ["alice", None, "charlie"],
-            "value": [10.0, 20.0, None],
-        })
-        
+        df = pd.DataFrame(
+            {
+                "id": [1, 2, None],
+                "name": ["alice", None, "charlie"],
+                "value": [10.0, 20.0, None],
+            }
+        )
+
         sample_data = SampleData.from_dataframe(df=df)
-        
+
         assert sample_data.tableData is not None
         assert len(sample_data.tableData) == 3
 
     def test_from_dataframe_empty(self):
         """Test creating SampleData from empty DataFrame."""
         df = pd.DataFrame()
-        
+
         sample_data = SampleData.from_dataframe(df=df)
-        
+
         assert sample_data.tableData == []
 
 
@@ -301,7 +303,7 @@ class TestS3Writer:
             filename="test-output",
             df=sample_dataframe,
         )
-        
+
         assert filename == "test-output.csv"
         assert isinstance(data, bytes)
         assert b"user_id" in data
@@ -310,16 +312,18 @@ class TestS3Writer:
     @pytest.mark.asyncio
     async def test_prepare_csv_with_datetime(self):
         """Test _prepare_csv handles datetime columns."""
-        df = pd.DataFrame({
-            "id": [1, 2],
-            "timestamp": pd.date_range("2024-01-01", periods=2),
-        })
-        
+        df = pd.DataFrame(
+            {
+                "id": [1, 2],
+                "timestamp": pd.date_range("2024-01-01", periods=2),
+            }
+        )
+
         filename, data = S3Destination._prepare_csv(
             filename="datetime-test",
             df=df,
         )
-        
+
         assert isinstance(data, bytes)
         assert b"timestamp" in data
 
@@ -331,9 +335,9 @@ class TestS3Writer:
             bucket="test-bucket",
         )
         writer = S3Destination(config=config)
-        
+
         # CSV should work
         assert hasattr(writer, "upload")
-        
+
         # Invalid format should raise error in upload
         # This requires mocking the S3 client, tested in integration tests

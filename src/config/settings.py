@@ -1,12 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, HttpUrl, field_validator
-from typing import Optional, Type
+from typing import Optional, Type, Literal
+from .secrets import DumpableSecretsBaseModel
+from .types import HiveMetastoreUri, JsonDict
 from .constants import (
     SDVSynthesizer,
     DEFAULT_LOG_LEVEL,
     BaseSynthesizer,
     SYNTHESIZER_MAP,
     APP_VERSION,
+    DEFAULT_MAX_THREADS,
+    DEFAULT_MAX_PENDING,
 )
 
 
@@ -14,7 +18,7 @@ class TrinoConnectionConfig(BaseSettings):
     host: str
     port: int = 443
     user: str
-    password: Optional[SecretStr] = None
+    password: Optional[SecretStr] = Field(None, repr=False)
     catalog: str = "dto_iceberg"
 
 
@@ -23,7 +27,7 @@ class OMDConfig(BaseSettings):
         ..., description="Base URL of OpenMetadata server, e.g. https://om.example.com"
     )
     token: SecretStr = Field(
-        ..., min_length=10, description="Bearer token for authentication"
+        ..., min_length=10, repr=False, description="Bearer token for authentication"
     )
     api_version: str = Field(
         "v1", pattern=r"^v\d+$", description="API version (e.g., 'v1')"
@@ -39,30 +43,39 @@ class OMDConfig(BaseSettings):
         return HttpUrl(str(v).rstrip("/"))
 
 
-class BaseS3Config(BaseSettings):
+class S3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
     endpoint: Optional[HttpUrl] = Field(
         None, description="Custom S3 endpoint (for minio, etc.)"
     )
     access_key: str
-    secret_key: SecretStr = Field(exclude=True)
+    secret_key: SecretStr = Field(repr=False)
     region: str = Field("us-east-1", description="AWS region (e.g., us-east-1)")
     bucket: str
 
 
-class S3DestinationConfig(BaseS3Config):
-    key: Optional[str] = Field(
-        None,
-        description="Path to save the file to. When left blank - constructed automatically",
+class HMSS3DestinationConfig(BaseSettings, DumpableSecretsBaseModel):
+    catalog_name: str = Field(serialization_alias="name")
+    type: Literal["hive"] = "hive"
+    uri: HiveMetastoreUri = Field(examples=["thrift://hms:9083"])
+    warehouse: str = Field(examples=["s3://my-bucket/warehouse/"])
+    s3_access_key_id: str = Field(serialization_alias="s3.access-key-id")
+    s3_secret_access_key: SecretStr = Field(
+        repr=False, serialization_alias="s3.secret-access-key",
+    )
+    write_format_default: str = Field(
+        "parquet",
+        serialization_alias="write.format.default",
+    )
+    s3_region: str = Field("us-east-1", serialization_alias="s3.region")
+    s3_endpoint: str = Field(
+        serialization_alias="s3.endpoint",
+        description="S3 endpoint URL (optional, for MinIO etc.)",
+    )
+    py_io_impl: str = Field(
+        "pyiceberg.io.pyarrow.PyArrowFileIO", serialization_alias="py-io-impl"
     )
 
-
-class S3SourceConfig(BaseS3Config):
-    key: str = Field(None, description="Path to read the file from")
-
-
-class ResourceSettings(BaseSettings):
-    max_concurrent_generations: int = 4
-    request_timeout_seconds: int = 300
+    model_config = SettingsConfigDict(populate_by_name=True)
 
 
 class FatAPISettings(BaseSettings):
@@ -72,22 +85,25 @@ class FatAPISettings(BaseSettings):
 
 class Settings(BaseSettings):
     # Default source configs
-    s3_source: Optional[S3SourceConfig] = None
     trino_source: Optional[TrinoConnectionConfig] = None
 
     # Default publish destinations
     openmetadata_destination: Optional[OMDConfig] = None
     s3_destination: Optional[S3DestinationConfig] = None
+    hms_s3_destination: Optional[HMSS3DestinationConfig] = None
 
     # FastAPI app settings
     fastapi: FatAPISettings = FatAPISettings()
 
     # SDV & queue
-    max_workers: int = 2
-    max_pending: int = 3
+    max_threads: int = Field(
+        DEFAULT_MAX_THREADS,
+        ge=1,
+        description="How much concurrent workloads to run at max",
+    )
+    max_pending: int = Field(DEFAULT_MAX_PENDING, ge=1, description="Max backpressure")
     sdv_model_type: SDVSynthesizer = SDVSynthesizer.GAUSSIAN_COPULA
-    sdv_model_params: dict = {}
-    cleanup_on_complete: bool = True
+    sdv_model_params: JsonDict = Field(default_factory=dict)
 
     # Logging
     log_level: str = DEFAULT_LOG_LEVEL

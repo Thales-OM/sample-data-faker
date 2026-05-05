@@ -1,14 +1,16 @@
 from fastapi import FastAPI, status, APIRouter, Depends, HTTPException, Request
 from src.metrics.middleware import MetricsMiddleware
 from src.core import SyntheticDataWorker
-from src.models import ReadinessResponse, LivenessResponse, VersionResponse
 from src.config import Settings
 from .lifespan import lifespan
 from .api import router as api_router
+from .models import ReadinessResponse, LivenessResponse, VersionResponse
 from .deps import get_worker_queue
 from .exception_handlers import (
+    register_global_exception_handlers,
     register_worker_exception_handlers,
     register_validation_exception_handlers,
+    register_destination_exception_handlers,
 )
 
 
@@ -63,8 +65,10 @@ def create_app() -> FastAPI:
 
     app.add_middleware(MetricsMiddleware)
 
+    register_global_exception_handlers(app=app)
     register_worker_exception_handlers(app=app)
     register_validation_exception_handlers(app=app)
+    register_destination_exception_handlers(app=app)
 
     app.include_router(router=root_router)
     app.include_router(router=api_router)

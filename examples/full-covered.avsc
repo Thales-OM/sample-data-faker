@@ -1,0 +1,130 @@
+{
+  "name": "examples.full_covered",
+  "type": "record",
+  "fields": [
+    { "name": "event_id", "type": "long" },
+    { "name": "event_name", "type": ["null", "string"], "default": null },
+    { "name": "event_ts", "type": "string", "format": "RFC3339Nano" },
+    { "name": "event_type", "type": ["null", "int"], "default": null },
+    { "name": "country_code", "type": ["null", "string"], "default": null },
+    { "name": "price", "type": ["null", "float"], "default": null },
+    {
+      "name": "is_service_processed",
+      "type": ["null", "boolean"],
+      "default": null
+    },
+    {
+      "name": "user",
+      "type": [
+        "null",
+        {
+          "name": "examples.full_covered_user",
+          "type": "record",
+          "fields": [
+            { "name": "user_id", "type": "int" },
+            { "name": "user_type", "type": ["null", "int"], "default": null },
+            {
+              "name": "additional_info",
+              "type": [
+                "null",
+                {
+                  "name": "examples.full_covered_user_additional_info",
+                  "type": "record",
+                  "fields": [
+                    {
+                      "name": "addresses_postomats",
+                      "type": ["null", { "type": "array", "items": "string" }],
+                      "default": null
+                    },
+                    {
+                      "name": "profile_info",
+                      "type": {
+                        "name": "examples.full_covered_user_additional_info_profile_info",
+                        "type": "record",
+                        "fields": [
+                          {
+                            "name": "date_created",
+                            "type": ["null", "string"],
+                            "default": null,
+                            "format": "ISO8601"
+                          },
+                          {
+                            "name": "reviews_count",
+                            "type": ["null", "long"],
+                            "default": null
+                          },
+                          {
+                            "name": "reviews_ids",
+                            "type": [
+                              "null",
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "logicalType": "uuid"
+                                }
+                              }
+                            ],
+                            "default": null
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "default": null
+            }
+          ]
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "parcel",
+      "type": [
+        "null",
+        {
+          "name": "examples.full_covered_parcel",
+          "type": "record",
+          "fields": [
+            { "name": "parcel_id", "type": "string", "format": "uint64" },
+            {
+              "name": "statuses",
+              "type": ["null", { "type": "array", "items": "int" }],
+              "default": null
+            },
+            {
+              "name": "date_created",
+              "type": ["null", "string"],
+              "default": null,
+              "format": "ISO8601"
+            },
+            {
+              "name": "goods",
+              "type": ["null", { "type": "array", "items": "string" }],
+              "default": null
+            },
+            {
+              "name": "weight",
+              "type": [
+                "null",
+                {
+                  "type": "bytes",
+                  "logicalType": "decimal",
+                  "precision": 8,
+                  "scale": 3
+                }
+              ],
+              "default": null
+            },
+            { "name": "length", "type": ["null", "double"], "default": null },
+            { "name": "height", "type": ["null", "double"], "default": null },
+            { "name": "width", "type": ["null", "double"], "default": null }
+          ]
+        }
+      ],
+      "default": null
+    }
+  ]
+}

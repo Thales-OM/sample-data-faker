@@ -1,21 +1,26 @@
-from typing import Union, Annotated
+from typing import Union
 import asyncio
 from fastapi import Depends, APIRouter, status, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import Field
-from src.core import SyntheticDataWorker, DataFrameWrapper
-from src.models import (
-    SyntheticRequest,
-    OpenMetadataPopulateResponse,
-    SampleData,
-    WebhookTableCreated,
-    WebhookTableUpdated,
-    WebhookResponse,
+from src.core import SyntheticDataWorker
+from src.destinations.openmetadata import (
+    AsyncOMDClient,
+    OpenMetadataDestination,
+    OpenMetadataDestinationConfigInternal,
 )
-from src.destinations.openmetadata import AsyncOMDClient
 from src.sources.trino import TrinoSource, TrinoSourceConfig
 from src.utils import openmetadata_to_dto_table
 from src.config import DEFAULT_SAMPLE_SIZE, DEFAULT_OUTPUT_SIZE, Settings
+from src.openmetadata.models import (
+    WebhookTableCreated,
+    WebhookTableUpdated,
+    TestMessage,
+)
+from ...models import (
+    SyntheticRequest,
+    OpenMetadataPopulateResponse,
+    WebhookResponse,
+)
 from ...deps import get_worker_queue, get_omd_async_client, get_app_settings
 
 
@@ -26,6 +31,7 @@ router = APIRouter(prefix="/openmetadata")
     "/generate/{table_fqn}",
     response_model=OpenMetadataPopulateResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Manually trigger Sample Data generation for Openmetadata table",
 )
 async def generate_synthetic(
     body: SyntheticRequest,
@@ -51,29 +57,36 @@ async def generate_synthetic(
         load_limit=body.load_limit,
     )
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
-    await omd_async_client.add_sample_data(id=table_id, body=sample_data)
+    await OpenMetadataDestination(
+        type="openmetadata",
+        config=OpenMetadataDestinationConfigInternal(
+            table_id=table_id, omd_async_client=omd_async_client
+        ),
+    ).submit(data=synthetic_data)
+
     return OpenMetadataPopulateResponse(
-        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_df_wrap)
+        table_fqn=table_fqn, table_id=table_id, output_size=len(synthetic_data)
     )
 
 
-WebhookTableUnionType = Annotated[
-    Union[WebhookTableCreated, WebhookTableUpdated], Field(discriminator="eventType")
-]
-
-
 @router.post(
-    "/webhook", response_model=WebhookResponse, status_code=status.HTTP_201_CREATED
+    "/webhook",
+    response_model=Union[WebhookResponse, TestMessage],
+    status_code=status.HTTP_201_CREATED,
+    summary="Sample Data generation on OMD table schema change webhook",
 )
 async def webhook(
-    body: WebhookTableUnionType,
+    body: Union[WebhookTableCreated, WebhookTableUpdated, TestMessage],
     omd_async_client: AsyncOMDClient = Depends(get_omd_async_client),
     worker: SyntheticDataWorker = Depends(get_worker_queue),
     settings: Settings = Depends(get_app_settings),
 ):
+    if isinstance(body, TestMessage):
+        # Just echo the same message back
+        return body
+
     if isinstance(body, WebhookTableUpdated) and not body.is_schema_change():
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -126,8 +139,12 @@ async def webhook(
         load_limit=DEFAULT_SAMPLE_SIZE,
     )  # May block up to 5s if at capacity
     asyncio_future = asyncio.wrap_future(future)
-    synthetic_df_wrap: DataFrameWrapper = await asyncio_future
+    synthetic_data = await asyncio_future
 
-    sample_data = SampleData.from_dataframe(df=synthetic_df_wrap.df_clean)
-    await omd_async_client.add_sample_data(id=table_id, body=sample_data)
+    await OpenMetadataDestination(
+        type="openmetadata",
+        config=OpenMetadataDestinationConfigInternal(
+            table_id=table_id, omd_async_client=omd_async_client
+        ),
+    ).submit(data=synthetic_data)
     return WebhookResponse(message="ok")

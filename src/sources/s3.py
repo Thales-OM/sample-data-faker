@@ -33,7 +33,7 @@ class S3SourceConfig(DataSourceConfig):
 
 @register_source
 class S3Source(DataSource):
-    type: Literal["s3"] = "s3"
+    type: Literal["s3"]
     config: S3SourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:

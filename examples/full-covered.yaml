@@ -1,0 +1,113 @@
+specification: 1.4.0
+title: full-covered
+type: object
+description: "Поток, демонстрирующий все возможности спецификации"
+properties:
+    event_id:
+        type: int64
+        description: "Идентификатор события"
+    event_name:
+        type: string
+        description: "Наименование события"
+    event_ts:
+        type: string
+        format: "RFC3339Nano"
+        description: "Дата и время события в наносекундах"
+    event_type:
+        type: int8
+        description: "Код типа события"
+    country_code:
+        type: string
+        description: "ISO-код страны"
+    price:
+        type: float
+        description: "Цена"
+    is_service_processed:
+        type: boolean
+        description: "Обработано ли событие сервисом"
+    user:
+        type: object
+        description: "Информация о получателе"
+        properties:
+            user_id:
+                type: int32
+                description: "Идентификатор пользователя"
+            user_type:
+                type: int16
+                description: "Тип Пользователя"
+            additional_info:
+                type: object
+                description: "Дополнительная информация"
+                properties:
+                    addresses_postomats:
+                        type: array
+                        description: "Список адресов ближайших постоматов"
+                        items:
+                            type: string
+                            description: "Адрес"
+                    profile_info:
+                        type: object
+                        description: "Информация о профиле пользователя"
+                        properties:
+                            date_created:
+                                type: string
+                                format: "ISO8601"
+                                description: "Дата и время создания пользователя"
+                            reviews_count:
+                                type: uint32
+                                description: "Кол-во оставленных отзывов"
+                            reviews_ids:
+                                type: array
+                                description: "Список идентификаторов отзывов"
+                                items:
+                                    type: string
+                                    format: "uuid"
+                                    description: "Идентификатор отзыва"
+                required:
+                    - profile_info
+        required:
+            - user_id
+    parcel:
+        type: object
+        description: "Информация о посылке"
+        properties:
+            parcel_id:
+                type: string
+                format: "uint64"
+                description: "Идентификатор посылки"
+            statuses:
+                type: array
+                description: "Список статусов"
+                items:
+                    type: uint16
+                    description: "Код статуса посылки"
+            date_created:
+                type: string
+                format: "ISO8601"
+                description: "Дата и время создания посылки"
+            goods:
+                type: array
+                description: "Список товаров в посылке, может быть огромным, не сплющивать!"
+                items:
+                    type: string
+                    format: "uint64"
+                    description: "Идентификатор товара"
+            weight:
+                type: decimal
+                description: "Вес посылки в килограммах"
+                scale: 3
+                precision: 8
+            length:
+                type: double
+                description: "Длина посылки в сантиметрах"
+            height:
+                type: double
+                description: "Высота посылки в сантиметрах"
+            width:
+                type: double
+                description: "Ширина посылки в сантиметрах"
+        required:
+            - parcel_id
+required:
+    - event_id
+    - event_ts

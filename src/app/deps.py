@@ -1,6 +1,6 @@
 from fastapi import Request
 from src.core.synthetic_worker import SyntheticDataWorker
-from src.destinations.openmetadata import AsyncOMDClient
+from src.openmetadata import AsyncOMDClient
 from src.config import Settings
 
 

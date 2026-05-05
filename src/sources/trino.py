@@ -51,7 +51,7 @@ class TrinoSourceConfig(DataSourceConfig):
 
 @register_source
 class TrinoSource(DataSource):
-    type: Literal["trino"] = "trino"
+    type: Literal["trino"]
     config: TrinoSourceConfig
 
     def load_dataframe(self, limit: int | None = None) -> pd.DataFrame:

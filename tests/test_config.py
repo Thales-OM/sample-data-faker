@@ -333,28 +333,25 @@ class TestSettings:
     def test_default_settings(self):
         """Test default settings values."""
         settings = Settings()
-        assert settings.max_workers == 2
+        assert settings.max_threads == 2
         assert settings.max_pending == 3
         assert settings.sdv_model_type == SDVSynthesizer.GAUSSIAN_COPULA
         assert settings.sdv_model_params == {}
-        assert settings.cleanup_on_complete is True
         assert settings.log_level == "INFO"
 
     def test_custom_settings(self):
         """Test custom settings values."""
         settings = Settings(
-            max_workers=4,
+            max_threads=4,
             max_pending=5,
             sdv_model_type=SDVSynthesizer.CTGAN,
             sdv_model_params={"epochs": 100},
-            cleanup_on_complete=False,
             log_level="DEBUG",
         )
-        assert settings.max_workers == 4
+        assert settings.max_threads == 4
         assert settings.max_pending == 5
         assert settings.sdv_model_type == SDVSynthesizer.CTGAN
         assert settings.sdv_model_params == {"epochs": 100}
-        assert settings.cleanup_on_complete is False
         assert settings.log_level == "DEBUG"
 
     def test_sdv_model_class_property(self):
@@ -431,7 +428,7 @@ LOG_LEVEL=WARNING
 """)
         
         settings = Settings(_env_file=env_file)
-        assert settings.max_workers == 5
+        assert settings.max_threads == 5
         assert settings.max_pending == 10
         assert settings.sdv_model_type == SDVSynthesizer.CTGAN
         assert settings.log_level == "WARNING"
@@ -443,4 +440,4 @@ LOG_LEVEL=WARNING
             unknown_field="should be ignored",
             another_unknown=123,
         )
-        assert settings.max_workers == 2  # Default value
+        assert settings.max_threads == 2  # Default value

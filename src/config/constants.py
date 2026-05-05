@@ -6,7 +6,7 @@ from sdv.single_table.base import BaseSynthesizer
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer
 
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
 
 # Logging
 DEFAULT_LOG_LEVEL = "INFO"
@@ -36,3 +36,7 @@ DUMMY_DATASET_FILEPATH = (
 
 # Avro parsing
 DEFAULT_AVRO_NAMESPACE = "wb"
+
+# Core worker
+DEFAULT_MAX_THREADS = 2
+DEFAULT_MAX_PENDING = 3

@@ -23,7 +23,7 @@ ingress:
         nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
         nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
       hosts:
-        - name: {{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}
+        - name: "{{ .Helm.Release.Namespace }}-ingress-controller.{{ .Helm.Release.Namespace }}.{{ .Helm.Release.Cluster }}"
           path: /{{ .Helm.Release.Name }}(/|$)(.*)
 
 vault:

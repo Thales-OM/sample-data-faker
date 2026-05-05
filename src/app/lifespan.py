@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
 
     app.state.worker = SyntheticDataWorker(
-        max_workers=settings.max_workers, max_pending=settings.max_pending,
+        max_workers=settings.max_threads, max_pending=settings.max_pending,
     )
     logger.info("Worker queue started")
 
@@ -54,5 +54,5 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    app.state.worker.shutdown(wait=True, timeout=60.0)
+    app.state.worker.shutdown(wait=True)
     logger.info("Worker queue stopped")
