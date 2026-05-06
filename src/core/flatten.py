@@ -22,6 +22,7 @@ class SchemaNode:
     nullable_elements: bool = False
     nullable_array: bool = False
     max_elements: int = 0
+    has_null_elements: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         result = {"node_type": self.node_type.value}
@@ -36,6 +37,8 @@ class SchemaNode:
         result["nullable_array"] = self.nullable_array
         if self.max_elements > 0:
             result["max_elements"] = self.max_elements
+        if self.has_null_elements:
+            result["has_null_elements"] = self.has_null_elements
         return result
 
     @classmethod
@@ -55,6 +58,7 @@ class SchemaNode:
             nullable_elements=data.get("nullable_elements", False),
             nullable_array=data.get("nullable_array", False),
             max_elements=data.get("max_elements", 0),
+            has_null_elements=data.get("has_null_elements", False),
         )
 
 
@@ -521,6 +525,7 @@ class DataFrameFlattener:
             element_type = pa_type.value_type
             max_len = 0
             has_nulls = False
+            has_null_elements = False
             element_values = []
 
             for v in values:
@@ -530,6 +535,7 @@ class DataFrameFlattener:
                 max_len = max(max_len, len(v))
                 for item in v:
                     if item is None:
+                        has_null_elements = True
                         has_nulls = True
                     else:
                         element_values.append(item)
@@ -547,6 +553,7 @@ class DataFrameFlattener:
                 nullable_elements=has_nulls,
                 nullable_array=False,
                 max_elements=max_len,
+                has_null_elements=has_null_elements,
             )
         elif pa.types.is_struct(pa_type):
             children = {}
@@ -779,6 +786,8 @@ class DataFrameFlattener:
         max_elements = schema_node.max_elements if schema_node.max_elements else 1
         num_rows = flat_table.num_rows
         element_schema = schema_node.element_schema
+        nullable_elements = schema_node.nullable_elements
+        has_null_elements = getattr(schema_node, 'has_null_elements', False)
 
         if element_schema and element_schema.node_type == NodeType.DICT:
             child_fields = element_schema.children
@@ -802,9 +811,23 @@ class DataFrameFlattener:
                         else:
                             struct_dict[field_name] = None
                     if found_any:
-                        row_items.append(struct_dict)
+                        if not nullable_elements:
+                            row_items.append(struct_dict)
+                        else:
+                            has_null_in_struct = any(
+                                v is None or (isinstance(v, float) and np.isnan(v))
+                                for v in struct_dict.values()
+                            )
+                            if not has_null_in_struct:
+                                row_items.append(struct_dict)
+                            elif has_null_elements:
+                                row_items.append(struct_dict)
                     else:
-                        row_items.append(None)
+                        if not nullable_elements:
+                            pass
+                        else:
+                            if has_null_elements:
+                                row_items.append(None)
                 result_lists[row_idx] = row_items
 
             if result_lists and result_lists[0]:
@@ -846,8 +869,10 @@ class DataFrameFlattener:
             else:
                 col_values = [None] * num_rows
             for row_idx, raw_val in enumerate(col_values):
-                if raw_val is None or (isinstance(raw_val, float) and np.isnan(raw_val)):
-                    result_lists[row_idx].append(None)
+                is_null = raw_val is None or (isinstance(raw_val, float) and np.isnan(raw_val))
+                if is_null:
+                    if nullable_elements and has_null_elements:
+                        result_lists[row_idx].append(None)
                 else:
                     result_lists[row_idx].append(raw_val)
 
@@ -901,6 +926,7 @@ class DataFrameFlattener:
     def _infer_array_schema(self, values: List[Any]) -> SchemaNode:
         has_nulls = False
         has_null_array = False
+        has_null_elements = False
         element_values = []
         max_len = 0
 
@@ -914,6 +940,7 @@ class DataFrameFlattener:
                 max_len = max(max_len, len(v))
                 for item in v:
                     if item is None or (isinstance(item, float) and np.isnan(item)):
+                        has_null_elements = True
                         has_nulls = True
                     else:
                         element_values.append(item)
@@ -929,6 +956,7 @@ class DataFrameFlattener:
             nullable_elements=has_nulls,
             nullable_array=has_null_array,
             max_elements=max_len,
+            has_null_elements=has_null_elements,
         )
 
     def _infer_dtype(self, values: List[Any]) -> str:
