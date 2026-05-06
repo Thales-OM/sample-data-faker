@@ -607,25 +607,44 @@ class DataFrameFlattener:
                 result.update(child_result)
 
         elif schema_node.node_type == NodeType.ARRAY:
-            max_elements = schema_node.max_elements
+            max_elements = schema_node.max_elements if schema_node.max_elements else 1
             py_list = self._chunked_array_to_list(col)
+            element_schema = schema_node.element_schema
 
             if schema_node.nullable_array:
                 result[f"{col_name}._is_null"] = [v is None for v in py_list]
 
-            for i in range(max_elements):
-                element_values = []
-                for v in py_list:
-                    if v is None:
-                        element_values.append(None)
-                    elif isinstance(v, list):
-                        if i < len(v):
-                            element_values.append(v[i])
+            if element_schema and element_schema.node_type == NodeType.DICT:
+                child_fields = element_schema.children
+                for i in range(max_elements):
+                    for field_name, field_schema in child_fields.items():
+                        field_values = []
+                        for v in py_list:
+                            if v is None:
+                                field_values.append(None)
+                            elif isinstance(v, list) and i < len(v):
+                                elem = v[i]
+                                if isinstance(elem, dict):
+                                    field_values.append(elem.get(field_name))
+                                else:
+                                    field_values.append(None)
+                            else:
+                                field_values.append(None)
+                        result[f"{col_name}__{i}.{field_name}"] = field_values
+            else:
+                for i in range(max_elements):
+                    element_values = []
+                    for v in py_list:
+                        if v is None:
+                            element_values.append(None)
+                        elif isinstance(v, list):
+                            if i < len(v):
+                                element_values.append(v[i])
+                            else:
+                                element_values.append(None)
                         else:
                             element_values.append(None)
-                    else:
-                        element_values.append(None)
-                result[f"{col_name}__{i}"] = element_values
+                    result[f"{col_name}__{i}"] = element_values
 
         return result
 
@@ -655,10 +674,7 @@ class DataFrameFlattener:
                 result.update(child_result)
 
         elif schema_node.node_type == NodeType.ARRAY:
-            max_elements = schema_node.max_elements
-
-            if schema_node.nullable_array:
-                result[f"{col_name}._is_null"] = [v is None for v in col_data]
+            max_elements = schema_node.max_elements if schema_node.max_elements else 1
 
             for i in range(max_elements):
                 element_values = []
@@ -675,57 +691,6 @@ class DataFrameFlattener:
                 result[f"{col_name}__{i}"] = element_values
 
         return result
-
-    def _unflatten_column_arrow(
-        self, flat_table: pa.Table, col_schema: ColumnSchema
-    ) -> pa.Array:
-        schema_node = col_schema.root_node
-        col_name = col_schema.name
-
-        if schema_node.node_type == NodeType.SCALAR:
-            return flat_table.column(col_name)
-
-        elif schema_node.node_type == NodeType.DICT:
-            return self._unflatten_dict_column_arrow(
-                flat_table, col_schema, schema_node
-            )
-
-        elif schema_node.node_type == NodeType.ARRAY:
-            max_elements = schema_node.max_elements
-            element_schema = schema_node.element_schema
-
-            if element_schema and element_schema.node_type == NodeType.DICT:
-                nested_fields = self._build_struct_fields(element_schema)
-                element_type = pa.struct(nested_fields)
-                list_type = pa.list_(element_type)
-                result_list = []
-                for row_idx in range(flat_table.num_rows):
-                    row_items = []
-                    for i in range(max_elements):
-                        struct_col = flat_table.column(f"{col_name}__{i}")
-                        struct_values = struct_col.to_pylist()
-                        if row_idx < len(struct_values):
-                            row_items.append(struct_values[row_idx])
-                        else:
-                            row_items.append(None)
-                    result_list.append(row_items)
-                result_array = pa.array(result_list, type=list_type)
-                return pa.chunked_array([result_array])
-            else:
-                result_lists: List[List[Any]] = [[] for _ in range(flat_table.num_rows)]
-                for i in range(max_elements):
-                    indexed_col_name = f"{col_name}__{i}"
-                    if indexed_col_name in flat_table.column_names:
-                        col = flat_table.column(indexed_col_name)
-                        col_values = col.to_pylist()
-                    else:
-                        col_values = [None] * flat_table.num_rows
-                    for row_idx, val in enumerate(col_values):
-                        result_lists[row_idx].append(val)
-                result_array = pa.array(result_lists)
-                return pa.chunked_array([result_array])
-
-        return flat_table.column(col_name)
 
     def _build_struct_fields(self, schema_node: SchemaNode) -> List[pa.Field]:
         """Build PyArrow struct fields from SchemaNode children."""
@@ -783,6 +748,120 @@ class DataFrameFlattener:
             result_array = pa.array(result_dicts)
         except pa.ArrowInvalid:
             result_array = pa.array(result_dicts, type=pa.string())
+        return pa.chunked_array([result_array])
+
+    def _unflatten_column_arrow(
+        self, flat_table: pa.Table, col_schema: ColumnSchema
+    ) -> pa.Array:
+        schema_node = col_schema.root_node
+
+        if schema_node.node_type == NodeType.SCALAR:
+            if col_schema.name in flat_table.column_names:
+                return flat_table.column(col_schema.name)
+            return flat_table.column(col_schema.name)
+
+        elif schema_node.node_type == NodeType.DICT:
+            return self._unflatten_dict_column_arrow(
+                flat_table, col_schema, schema_node
+            )
+
+        elif schema_node.node_type == NodeType.ARRAY:
+            return self._unflatten_array_column_arrow(
+                flat_table, col_schema, schema_node
+            )
+
+        return flat_table.column(col_schema.name)
+
+    def _unflatten_array_column_arrow(
+        self, flat_table: pa.Table, col_schema: ColumnSchema, schema_node: SchemaNode
+    ) -> pa.Array:
+        col_name = col_schema.name
+        max_elements = schema_node.max_elements if schema_node.max_elements else 1
+        num_rows = flat_table.num_rows
+        element_schema = schema_node.element_schema
+
+        if element_schema and element_schema.node_type == NodeType.DICT:
+            child_fields = element_schema.children
+            result_lists = [[] for _ in range(num_rows)]
+            for row_idx in range(num_rows):
+                row_items = []
+                for i in range(max_elements):
+                    struct_dict = {}
+                    found_any = False
+                    for field_name in child_fields.keys():
+                        indexed_col_name = f"{col_name}__{i}.{field_name}"
+                        if indexed_col_name in flat_table.column_names:
+                            col = flat_table.column(indexed_col_name)
+                            raw_val = col.to_pylist()[row_idx]
+                            if raw_val is None or (isinstance(raw_val, float) and np.isnan(raw_val)):
+                                val = None
+                            else:
+                                val = raw_val
+                            struct_dict[field_name] = val
+                            found_any = True
+                        else:
+                            struct_dict[field_name] = None
+                    if found_any:
+                        row_items.append(struct_dict)
+                    else:
+                        row_items.append(None)
+                result_lists[row_idx] = row_items
+
+            if result_lists and result_lists[0]:
+                first_item = result_lists[0][0]
+                if first_item is not None:
+                    nested_fields = []
+                    for field_name in child_fields.keys():
+                        field_val = first_item.get(field_name)
+                        if field_val is None or (isinstance(field_val, float) and np.isnan(field_val)):
+                            field_type = pa.string()
+                        elif isinstance(field_val, bool):
+                            field_type = pa.bool_()
+                        elif isinstance(field_val, int):
+                            field_type = pa.int64()
+                        elif isinstance(field_val, float):
+                            field_type = pa.float64()
+                        else:
+                            field_type = pa.string()
+                        nested_fields.append(pa.field(field_name, field_type, nullable=True))
+                    element_type = pa.struct(nested_fields)
+                    list_type = pa.list_(element_type)
+                    try:
+                        result_array = pa.array(result_lists, type=list_type)
+                    except (pa.ArrowInvalid, pa.ArrowTypeError):
+                        string_lists = [[str(item) if item is not None else None for item in row] for row in result_lists]
+                        result_array = pa.array(string_lists, type=pa.list_(pa.string()))
+                    return pa.chunked_array([result_array])
+
+            empty_type = pa.list_(pa.string())
+            result_array = pa.array(result_lists, type=empty_type)
+            return pa.chunked_array([result_array])
+
+        result_lists = [[] for _ in range(num_rows)]
+        for i in range(max_elements):
+            indexed_col_name = f"{col_name}__{i}"
+            if indexed_col_name in flat_table.column_names:
+                col = flat_table.column(indexed_col_name)
+                col_values = col.to_pylist()
+            else:
+                col_values = [None] * num_rows
+            for row_idx, raw_val in enumerate(col_values):
+                if raw_val is None or (isinstance(raw_val, float) and np.isnan(raw_val)):
+                    result_lists[row_idx].append(None)
+                else:
+                    result_lists[row_idx].append(raw_val)
+
+        if element_schema:
+            element_type = self._schema_node_to_pyarrow_type(element_schema)
+            list_type = pa.list_(element_type)
+        else:
+            list_type = pa.list_(pa.string())
+
+        try:
+            result_array = pa.array(result_lists, type=list_type)
+        except (pa.ArrowInvalid, pa.ArrowTypeError):
+            string_lists = [[str(item) if item is not None else None for item in row] for row in result_lists]
+            result_array = pa.array(string_lists, type=pa.list_(pa.string()))
         return pa.chunked_array([result_array])
 
     def _infer_schema_from_values(self, values: List[Any]) -> SchemaNode:
