@@ -2,6 +2,7 @@
 Unit tests for DataFrameFlattener array handling functionality.
 """
 
+import datetime
 import pytest
 import pandas as pd
 import pyarrow as pa
@@ -510,7 +511,7 @@ class TestPyArrowSupport:
         assert user_values[0] == {"name": "Alice", "age": 30}
 
     def test_flatten_list_of_structs(self):
-        """Test that array of structs is flattened correctly."""
+        """Test that array of structs is flattened correctly into primitive fields."""
         flattener = DataFrameFlattener()
         table = pa.table(
             {
@@ -524,11 +525,14 @@ class TestPyArrowSupport:
         flat_table = flattener.flatten(table)
 
         assert "id" in flat_table.column_names
-        assert "items[0]" in flat_table.column_names
-        assert "items[1]" in flat_table.column_names
-        items_0_struct = flat_table["items[0]"].to_pylist()
-        assert items_0_struct[0]["product"] == "A"
-        assert items_0_struct[0]["qty"] == 1
+        assert "items__0.product" in flat_table.column_names
+        assert "items__0.qty" in flat_table.column_names
+        assert "items__1.product" in flat_table.column_names
+        assert "items__1.qty" in flat_table.column_names
+        product_col = flat_table["items__0.product"].to_pylist()
+        assert product_col[0] == "A"
+        qty_col = flat_table["items__0.qty"].to_pylist()
+        assert qty_col[0] == 1
 
     def test_unflatten_list_of_structs(self):
         """Test that array of structs is unflattened correctly."""
@@ -696,9 +700,9 @@ class TestPyArrowSupport:
         assert "event.ts" in flat_table.column_names
         assert "event.name" in flat_table.column_names
 
+    @pytest.mark.unit
     def test_list_of_timestamps(self):
-        """Test that arrays of timestamps are handled correctly."""
-        import datetime
+        """Test that array of timestamps is flattened correctly."""
         flattener = DataFrameFlattener()
         
         ts1 = datetime.datetime(2020, 1, 1, 12, 0, 0)
@@ -717,8 +721,8 @@ class TestPyArrowSupport:
         flat_table = flattener.flatten(table)
         
         assert "id" in flat_table.column_names
-        assert "timestamps[0]" in flat_table.column_names
-        assert "timestamps[1]" in flat_table.column_names
-        assert "timestamps[2]" in flat_table.column_names
+        assert "timestamps__0" in flat_table.column_names
+        assert "timestamps__1" in flat_table.column_names
+        assert "timestamps__2" in flat_table.column_names
 
 
