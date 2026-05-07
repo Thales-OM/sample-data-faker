@@ -23,6 +23,7 @@ class SchemaNode:
     nullable_array: bool = False
     max_elements: int = 0
     has_null_elements: bool = False
+    nullable: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         result = {"node_type": self.node_type.value}
@@ -39,6 +40,8 @@ class SchemaNode:
             result["max_elements"] = self.max_elements
         if self.has_null_elements:
             result["has_null_elements"] = self.has_null_elements
+        if self.nullable is not True:
+            result["nullable"] = self.nullable
         return result
 
     @classmethod
@@ -59,6 +62,7 @@ class SchemaNode:
             nullable_array=data.get("nullable_array", False),
             max_elements=data.get("max_elements", 0),
             has_null_elements=data.get("has_null_elements", False),
+            nullable=data.get("nullable", True),
         )
 
 
@@ -132,8 +136,10 @@ class DataFrameFlattener:
         array_metadata = {}
 
         for col_name in flat_table.column_names:
-            if "__" in col_name:
-                base, idx_str = col_name.rsplit("__", 1)
+            if "[" in col_name:
+                base, idx_str = col_name.rsplit("[", 1)
+                if idx_str.endswith("]"):
+                    idx_str = idx_str[:-1]
                 try:
                     idx = int(idx_str)
                     if base not in array_metadata:
@@ -153,7 +159,7 @@ class DataFrameFlattener:
             meta = array_metadata[base]
             meta["num_elements"] = meta["max_index"] + 1
             meta["columns"] = sorted(
-                meta["columns"], key=lambda x: int(x.rsplit("__", 1)[1])
+                meta["columns"], key=lambda x: int(x.rsplit("[", 1)[1].rstrip("]"))
             )
 
         return array_metadata
@@ -174,8 +180,10 @@ class DataFrameFlattener:
         array_metadata = {}
 
         for col_name in flat_df.columns:
-            if "__" in col_name:
-                base, idx_str = col_name.rsplit("__", 1)
+            if "[" in col_name:
+                base, idx_str = col_name.rsplit("[", 1)
+                if idx_str.endswith("]"):
+                    idx_str = idx_str[:-1]
                 try:
                     idx = int(idx_str)
                     if base not in array_metadata:
@@ -195,7 +203,7 @@ class DataFrameFlattener:
             meta = array_metadata[base]
             meta["num_elements"] = meta["max_index"] + 1
             meta["columns"] = sorted(
-                meta["columns"], key=lambda x: int(x.rsplit("__", 1)[1])
+                meta["columns"], key=lambda x: int(x.rsplit("[", 1)[1].rstrip("]"))
             )
 
         return array_metadata
@@ -237,7 +245,7 @@ class DataFrameFlattener:
         for col_name in table.column_names:
             col = table.column(col_name)
             col_types[col_name] = col.type
-            col_schema = self._build_column_schema_from_arrow(col_name, col)
+            col_schema = self._build_column_schema_from_arrow(col_name, col, table.schema)
             self._schema[col_name] = col_schema
             flat_col_data = self._flatten_column_arrow(
                 col, col_schema.root_node, [col_name]
@@ -254,27 +262,73 @@ class DataFrameFlattener:
                 arrays.append(pa.chunked_array([safe_values], type=pa.string()))
             else:
                 type_hint = None
-                if col_name in self._schema:
-                    root = self._schema[col_name].root_node
-                    if root and root.dtype:
-                        dtype = root.dtype
+                if col_name in col_types:
+                    original_type = col_types[col_name]
+                    if not pa.types.is_null(original_type):
+                        type_hint = original_type
+                if type_hint is None:
+                    schema_node = self._get_schema_node_for_path(col_name)
+                    if schema_node and schema_node.dtype:
+                        dtype = schema_node.dtype
                         if isinstance(dtype, str) and "timestamp" in dtype.lower():
                             type_hint = pa.string()
-                if type_hint:
-                    safe_values = [v if v is None else str(v) for v in values]
-                    arrays.append(pa.chunked_array([safe_values], type=type_hint))
+                        elif dtype != "null":
+                            type_hint = self._dtype_to_pyarrow_type(dtype, False)
+                if type_hint and not pa.types.is_null(type_hint):
+                    try:
+                        arrays.append(pa.chunked_array([values], type=type_hint))
+                    except (OverflowError, pa.ArrowTypeError, TypeError) as e:
+                        safe_values = [
+                            str(v) if v is not None else None for v in values
+                        ]
+                        arrays.append(pa.chunked_array([safe_values], type=pa.string()))
                 else:
                     try:
                         arrays.append(pa.chunked_array([values]))
-                    except OverflowError:
+                    except (OverflowError, pa.ArrowTypeError, TypeError):
                         safe_values = [
                             str(v) if v is not None else None for v in values
                         ]
                         arrays.append(pa.chunked_array([safe_values], type=pa.string()))
 
-        flat_table = pa.Table.from_arrays(arrays, names=col_names)
+        fields = []
+        for col_name, arr in zip(col_names, arrays):
+            if col_name in col_types:
+                original_type = col_types[col_name]
+                if not pa.types.is_null(original_type):
+                    fields.append(pa.field(col_name, original_type, nullable=False))
+                else:
+                    fields.append(pa.field(col_name, arr.type, nullable=True))
+            else:
+                fields.append(pa.field(col_name, arr.type, nullable=True))
+        
+        flat_table = pa.Table.from_arrays(arrays, schema=pa.schema(fields))
         self._array_metadata = self._extract_array_metadata(flat_table=flat_table)
         return flat_table
+
+    def _get_schema_node_for_path(self, path: str) -> "SchemaNode":
+        """Get the SchemaNode for a given dot-separated path."""
+        if "[" in path:
+            base = path.split("[")[0]
+            rest = path[len(base):]
+            base_node = self._get_schema_node_for_path(base)
+            if base_node and base_node.node_type == NodeType.ARRAY:
+                return base_node.element_schema
+            return base_node
+        
+        parts = path.split(".")
+        if not parts or parts[0] not in self._schema:
+            return None
+        
+        current = self._schema[parts[0]].root_node
+        for i, part in enumerate(parts[1:], 1):
+            if current.node_type == NodeType.DICT and part in current.children:
+                current = current.children[part]
+            elif current.node_type == NodeType.ARRAY:
+                current = current.element_schema
+            else:
+                return None
+        return current
 
     def _chunked_array_to_list(self, col: pa.ChunkedArray) -> List[Any]:
         if pa.types.is_timestamp(col.type):
@@ -433,20 +487,40 @@ class DataFrameFlattener:
         result = {}
         for col_name, col_schema in self._schema.items():
             root_dtype = col_schema.root_node.dtype
+            is_nullable = col_schema.root_node.nullable
             
             if col_schema.root_node.node_type == NodeType.SCALAR:
                 if col_name in flat_table.column_names:
-                    result[col_name] = flat_table.column(col_name)
+                    col = flat_table.column(col_name)
+                    if root_dtype == "null":
+                        null_arr = pa.array([None] * flat_table.num_rows, type=pa.null())
+                        result[col_name] = pa.chunked_array([null_arr])
+                    else:
+                        result[col_name] = col
                 elif root_dtype == "null":
                     null_arr = pa.array([None] * flat_table.num_rows, type=pa.null())
                     result[col_name] = pa.chunked_array([null_arr])
                 else:
-                    result[col_name] = flat_table.column(col_name)
+                    col = flat_table.column(col_name)
+                    result[col_name] = col
             else:
                 result[col_name] = self._unflatten_column_arrow(flat_table, col_schema)
 
         self._input_is_pyarrow = True
-        table = pa.Table.from_pydict(result)
+        
+        fields = []
+        for col_name, col_schema in self._schema.items():
+            if col_name in result:
+                arr = result[col_name]
+                is_nullable = col_schema.root_node.nullable
+                target_type = self._dtype_to_pyarrow_type(col_schema.root_node.dtype, is_nullable)
+                try:
+                    result[col_name] = pa.chunked_array([arr.cast(target_type)])
+                except:
+                    pass
+                fields.append(pa.field(col_name, result[col_name].type, nullable=is_nullable))
+        
+        table = pa.Table.from_arrays(list(result.values()), schema=pa.schema(fields))
         return table
 
     def _unflatten_pandas(self, flat_df: pd.DataFrame) -> pd.DataFrame:
@@ -486,7 +560,7 @@ class DataFrameFlattener:
         return ColumnSchema(name=col_name, root_node=root_node)
 
     def _build_column_schema_from_arrow(
-        self, col_name: str, col: pa.ChunkedArray
+        self, col_name: str, col: pa.ChunkedArray, table_schema: pa.Schema = None
     ) -> ColumnSchema:
         col_type = col.type
 
@@ -503,19 +577,33 @@ class DataFrameFlattener:
         if pa.types.is_null(col_type):
             return ColumnSchema(
                 name=col_name,
-                root_node=SchemaNode(node_type=NodeType.SCALAR, dtype="null"),
+                root_node=SchemaNode(node_type=NodeType.SCALAR, dtype="null", nullable=True),
             )
 
         non_null = col.filter(pc.not_equal(col, None)).to_pylist()
         non_null = [v for v in non_null if v is not None]
 
+        is_nullable = True
+        if table_schema is not None:
+            field = table_schema.field(col_name)
+            is_nullable = field.nullable
+
+        base_type = col_type
+        if hasattr(col_type, 'value_type'):
+            base_type = col_type.value_type
+
         if not non_null:
             return ColumnSchema(
                 name=col_name,
-                root_node=SchemaNode(node_type=NodeType.SCALAR, dtype=str(col_type)),
+                root_node=SchemaNode(
+                    node_type=NodeType.SCALAR,
+                    dtype=self._pa_type_to_dtype(base_type),
+                    nullable=is_nullable,
+                ),
             )
 
-        root_node = self._infer_schema_from_values_arrow(non_null, col_type)
+        root_node = self._infer_schema_from_values_arrow(non_null, base_type)
+        root_node.nullable = is_nullable
         return ColumnSchema(name=col_name, root_node=root_node)
 
     def _infer_schema_from_values_arrow(
@@ -527,6 +615,11 @@ class DataFrameFlattener:
             has_nulls = False
             has_null_elements = False
             element_values = []
+
+            is_element_nullable = False
+            element_base_type = element_type
+            if hasattr(element_type, 'value_type'):
+                element_base_type = element_type.value_type
 
             for v in values:
                 if v is None:
@@ -541,16 +634,21 @@ class DataFrameFlattener:
                         element_values.append(item)
 
             if not element_values:
-                element_schema = SchemaNode(node_type=NodeType.SCALAR, dtype="object")
+                element_schema = SchemaNode(
+                    node_type=NodeType.SCALAR,
+                    dtype=self._pa_type_to_dtype(element_base_type),
+                    nullable=is_element_nullable,
+                )
             else:
                 element_schema = self._infer_schema_from_values_arrow(
-                    element_values, element_type
+                    element_values, element_base_type
                 )
+                element_schema.nullable = is_element_nullable
 
             return SchemaNode(
                 node_type=NodeType.ARRAY,
                 element_schema=element_schema,
-                nullable_elements=has_nulls,
+                nullable_elements=has_nulls or is_element_nullable,
                 nullable_array=False,
                 max_elements=max_len,
                 has_null_elements=has_null_elements,
@@ -572,8 +670,12 @@ class DataFrameFlattener:
                 )
             return SchemaNode(node_type=NodeType.DICT, children=children)
         else:
-            dtype = self._pa_type_to_dtype(pa_type)
-            return SchemaNode(node_type=NodeType.SCALAR, dtype=dtype)
+            is_nullable = False
+            base_type = pa_type
+            if hasattr(pa_type, 'value_type'):
+                base_type = pa_type.value_type
+            dtype = self._pa_type_to_dtype(base_type)
+            return SchemaNode(node_type=NodeType.SCALAR, dtype=dtype, nullable=is_nullable)
 
     def _pa_type_to_dtype(self, pa_type: pa.DataType) -> str:
         if pa.types.is_integer(pa_type):
@@ -709,22 +811,40 @@ class DataFrameFlattener:
             fields.append(pa.field(key, field_type, nullable=True))
         return fields
 
+    def _dtype_to_pyarrow_type(self, dtype: Optional[str], nullable: bool = True) -> pa.DataType:
+        """Convert dtype string to PyArrow type."""
+        if dtype is None:
+            base = pa.large_string()
+        elif dtype == "int64":
+            base = pa.int64()
+        elif dtype == "int32":
+            base = pa.int32()
+        elif dtype == "int16":
+            base = pa.int16()
+        elif dtype == "int8":
+            base = pa.int8()
+        elif dtype == "float64":
+            base = pa.float64()
+        elif dtype == "float32":
+            base = pa.float32()
+        elif dtype == "bool":
+            base = pa.bool_()
+        elif dtype == "object":
+            base = pa.large_string()
+        elif dtype == "null":
+            base = pa.null()
+        else:
+            base = pa.large_string()
+        
+        return base
+
     def _schema_node_to_pyarrow_type(self, schema_node: SchemaNode) -> pa.DataType:
         """Convert a SchemaNode to PyArrow type."""
         if schema_node.node_type == NodeType.SCALAR:
-            dtype = schema_node.dtype
-            if dtype == "int64":
-                return pa.int64()
-            elif dtype == "float64":
-                return pa.float64()
-            elif dtype == "bool":
-                return pa.bool()
-            elif dtype == "object":
-                return pa.string()
-            elif dtype == "null":
-                return pa.null()
-            else:
-                return pa.string()
+            base_type = self._dtype_to_pyarrow_type(schema_node.dtype, nullable=False)
+            if schema_node.nullable:
+                return pa.nullable(base_type)
+            return base_type
         elif schema_node.node_type == NodeType.DICT:
             child_fields = []
             for key, child_schema in schema_node.children.items():
@@ -751,10 +871,19 @@ class DataFrameFlattener:
             for i, val in enumerate(child_values):
                 result_dicts[i][key] = val
 
+        struct_fields = []
+        for key, child_schema in schema_node.children.items():
+            if child_schema.dtype and child_schema.dtype != "null":
+                field_type = self._dtype_to_pyarrow_type(child_schema.dtype, child_schema.nullable)
+            else:
+                field_type = pa.string()
+            struct_fields.append(pa.field(key, field_type, nullable=child_schema.nullable))
+        
+        struct_type = pa.struct(struct_fields)
         try:
+            result_array = pa.array(result_dicts, type=struct_type)
+        except (pa.ArrowInvalid, pa.ArrowTypeError):
             result_array = pa.array(result_dicts)
-        except pa.ArrowInvalid:
-            result_array = pa.array(result_dicts, type=pa.string())
         return pa.chunked_array([result_array])
 
     def _unflatten_column_arrow(
@@ -764,7 +893,21 @@ class DataFrameFlattener:
 
         if schema_node.node_type == NodeType.SCALAR:
             if col_schema.name in flat_table.column_names:
-                return flat_table.column(col_schema.name)
+                col = flat_table.column(col_schema.name)
+                if pa.types.is_null(col.type) and schema_node.dtype and schema_node.dtype != "null":
+                    target_type = self._dtype_to_pyarrow_type(schema_node.dtype, schema_node.nullable)
+                    try:
+                        return pa.chunked_array([col.cast(target_type)])
+                    except:
+                        return col
+                elif not schema_node.nullable and schema_node.dtype:
+                    target_type = self._dtype_to_pyarrow_type(schema_node.dtype, schema_node.nullable)
+                    if not col.type.equals(target_type):
+                        try:
+                            return pa.chunked_array([col.cast(target_type)])
+                        except:
+                            return col
+                return col
             return flat_table.column(col_schema.name)
 
         elif schema_node.node_type == NodeType.DICT:
@@ -834,19 +977,22 @@ class DataFrameFlattener:
                 first_item = result_lists[0][0]
                 if first_item is not None:
                     nested_fields = []
-                    for field_name in child_fields.keys():
-                        field_val = first_item.get(field_name)
-                        if field_val is None or (isinstance(field_val, float) and np.isnan(field_val)):
-                            field_type = pa.string()
-                        elif isinstance(field_val, bool):
-                            field_type = pa.bool_()
-                        elif isinstance(field_val, int):
-                            field_type = pa.int64()
-                        elif isinstance(field_val, float):
-                            field_type = pa.float64()
+                    for field_name, field_schema in child_fields.items():
+                        if field_schema.dtype and field_schema.dtype != "null":
+                            field_type = self._dtype_to_pyarrow_type(field_schema.dtype, field_schema.nullable)
                         else:
-                            field_type = pa.string()
-                        nested_fields.append(pa.field(field_name, field_type, nullable=True))
+                            field_val = first_item.get(field_name)
+                            if field_val is None or (isinstance(field_val, float) and np.isnan(field_val)):
+                                field_type = pa.string()
+                            elif isinstance(field_val, bool):
+                                field_type = pa.bool_()
+                            elif isinstance(field_val, int):
+                                field_type = pa.int64()
+                            elif isinstance(field_val, float):
+                                field_type = pa.float64()
+                            else:
+                                field_type = pa.string()
+                        nested_fields.append(pa.field(field_name, field_type, nullable=field_schema.nullable))
                     element_type = pa.struct(nested_fields)
                     list_type = pa.list_(element_type)
                     try:
@@ -1120,6 +1266,7 @@ class DataFrameFlattener:
         max_elements = schema_node.max_elements
         nullable_array = schema_node.nullable_array
         nullable_elements = schema_node.nullable_elements
+        has_null_elements = getattr(schema_node, 'has_null_elements', False)
 
         is_null_col = None
         if nullable_array:
@@ -1148,6 +1295,12 @@ class DataFrameFlattener:
                         )
                         if not nullable_elements and processed is None:
                             continue
+                        if (
+                            nullable_elements
+                            and not has_null_elements
+                            and processed is None
+                        ):
+                            continue
                         values.append(processed)
                     elif (
                         schema_node.element_schema.node_type == NodeType.ARRAY
@@ -1158,10 +1311,18 @@ class DataFrameFlattener:
                         )
                         if not nullable_elements and processed is None:
                             continue
+                        if (
+                            nullable_elements
+                            and not has_null_elements
+                            and processed is None
+                        ):
+                            continue
                         values.append(processed)
                     else:
                         if pd.isna(val):
                             if not nullable_elements:
+                                continue
+                            if has_null_elements is False:
                                 continue
                         values.append(val)
                 elif not nullable_elements:
